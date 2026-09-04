@@ -49,7 +49,11 @@ export const registerPerformer = mutation({
       v.literal("Non-binary"),
       v.literal("Prefer not to say"),
     ),
-    faculty: v.string(),
+    faculty: v.union(
+      v.literal("คณะแพทยศาสตร์"),
+      v.literal("คณะศิลปศาสตร์"),
+      v.literal("คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"),
+    ),
     phone: v.string(),
     email: v.string(),
     lineId: v.optional(v.string()),
@@ -82,7 +86,7 @@ export const registerPerformer = mutation({
     const faculty = args.faculty.trim();
     const phone = normalizePhone(args.phone);
     const email = args.email.trim().toLowerCase();
-    if (!/^\d{8,12}$/.test(studentId)) throw new Error("Please enter a valid Student ID");
+    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish || !faculty) throw new Error("Please complete all required personal information");
     if (!phone) throw new Error("Please enter a valid 10-digit Thai phone number");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Please enter a valid email address");
@@ -165,6 +169,9 @@ export const verifyIdentity = mutation({
     await ctx.db.patch("auditEvents", audit._id, { attempts: audit.attempts + 1 });
 
     const studentId = args.studentId.trim();
+    if (!/^\d{10}$/.test(studentId)) {
+      throw new Error("Student ID must contain exactly 10 digits");
+    }
     const participant = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
     const submittedPhone = normalizePhone(args.phone);
     const registeredPhone = normalizePhone(participant?.phone ?? "");

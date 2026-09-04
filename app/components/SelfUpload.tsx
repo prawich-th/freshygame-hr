@@ -97,7 +97,7 @@ export function SelfUpload() {
           {step === 1 && <>
             <h2>ยืนยันตัวตนของคุณ</h2><p>Verify your identity with your Student ID and full registered phone number.</p>
             <form onSubmit={handleVerify}>
-              <div className="field"><label>หมายเลขประจำตัวนักศึกษา / Student ID <span>*</span></label><input className="input" name="studentId" required inputMode="numeric" placeholder="เช่น 6709680123" /></div>
+              <div className="field"><label>หมายเลขประจำตัวนักศึกษา / Student ID <span>*</span></label><input className="input" name="studentId" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="เช่น 6909680123" /></div>
               <div className="field"><label>หมายเลขโทรศัพท์ที่ลงทะเบียน / Registered phone number <span>*</span></label><input className="input" name="phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="081-234-5678 or +66 81 234 5678" /></div>
               <div className="notice notice--info"><LockKeyhole size={13} style={{verticalAlign:"middle",marginRight:6}}/>IP address and browser details are recorded to protect your personal data.</div>
               {error && <div className="notice notice--error">{error}</div>}

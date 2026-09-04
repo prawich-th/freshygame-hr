@@ -22,6 +22,7 @@ import { Brand } from "./Brand";
 type PerformerType = "Katakorn" | "Cheerleader";
 type Sex = "Male" | "Female" | "Non-binary" | "Prefer not to say";
 type PreferredContact = "Phone" | "LINE" | "Instagram" | "Email";
+type Faculty = "คณะแพทยศาสตร์" | "คณะศิลปศาสตร์" | "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์";
 type Registration = {
   sessionId: Id<"uploadSessions">;
   name: string;
@@ -76,7 +77,7 @@ export function PerformerRegistration() {
         nicknameThai: optional(data.get("nicknameThai")),
         nicknameEnglish: optional(data.get("nicknameEnglish")),
         sex: String(data.get("sex")) as Sex,
-        faculty: String(data.get("faculty")),
+        faculty: String(data.get("faculty")) as Faculty,
         phone: String(data.get("phone")),
         email: String(data.get("email")),
         lineId: optional(data.get("lineId")),
@@ -178,8 +179,8 @@ export function PerformerRegistration() {
                 <label><input type="radio" name="performerType" value="Cheerleader" required /><span><Sparkles size={20} /><strong>Cheerleader</strong><small>เชียร์ลีดเดอร์</small></span></label>
               </div>
               <div className="form-grid">
-                <Field name="studentId" label="รหัสนักศึกษา / Student ID" required inputMode="numeric" placeholder="6709680123" />
-                <Field name="faculty" label="คณะ / Faculty" required placeholder="Faculty name" />
+                <Field name="studentId" label="รหัสนักศึกษา / Student ID" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="6909680123" />
+                <div className="field"><label>คณะ / Faculty <span>*</span></label><select className="select registration-select" name="faculty" required defaultValue=""><option value="" disabled>เลือกคณะ / Select faculty</option><option value="คณะแพทยศาสตร์">คณะแพทยศาสตร์</option><option value="คณะศิลปศาสตร์">คณะศิลปศาสตร์</option><option value="คณะแพทยศาสตร์นานาชาติจุฬาภรณ์">คณะแพทยศาสตร์นานาชาติจุฬาภรณ์</option></select></div>
                 <Field name="fullNameThai" label="ชื่อ-สกุล (ไทย) / Thai full name" required placeholder="ชื่อ นามสกุล" />
                 <Field name="nicknameThai" label="ชื่อเล่น (ไทย) / Thai nickname" placeholder="ชื่อเล่น" />
                 <Field name="fullNameEnglish" label="Full name (English)" required placeholder="Name Surname" />

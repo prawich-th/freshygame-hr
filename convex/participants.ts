@@ -291,12 +291,24 @@ export const importBatch = mutation({
     for (const row of args.participants) {
       const studentId = row.studentId.trim();
       if (!studentId || !row.fullNameEnglish.trim()) continue;
+      if (!/^\d{10}$/.test(studentId)) {
+        throw new Error(`Student ID ${studentId} must contain exactly 10 digits`);
+      }
+      const faculty = row.faculty.trim();
+      if (![
+        "คณะแพทยศาสตร์",
+        "คณะศิลปศาสตร์",
+        "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์",
+      ].includes(faculty)) {
+        throw new Error(`Student ID ${studentId} has an unsupported faculty`);
+      }
       const existing = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
       const email = rawEmail?.trim().toLowerCase() || undefined;
       const data = {
         ...participantFields,
+        faculty,
         participantKind: row.performerType ? "performer" as const : "athlete" as const,
         studentId,
         ...(email ? { email } : {}),
@@ -364,7 +376,11 @@ export const updateParticipant = mutation({
     nicknameThai: v.optional(v.string()),
     nicknameEnglish: v.optional(v.string()),
     sex: v.optional(v.string()),
-    faculty: v.string(),
+    faculty: v.union(
+      v.literal("คณะแพทยศาสตร์"),
+      v.literal("คณะศิลปศาสตร์"),
+      v.literal("คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"),
+    ),
     sport: v.string(),
     category: v.optional(v.string()),
     email: v.optional(v.string()),
@@ -384,7 +400,7 @@ export const updateParticipant = mutation({
     const fullNameEnglish = args.fullNameEnglish.trim();
     const faculty = args.faculty.trim();
     const sport = args.sport.trim();
-    if (!/^\d{8,12}$/.test(studentId)) throw new Error("Student ID must contain 8–12 digits");
+    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish || !faculty || !sport) {
       throw new Error("Student ID, names, faculty, and activity are required");
     }
