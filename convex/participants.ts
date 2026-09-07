@@ -3,10 +3,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireEditor, requireStaff } from "./access";
 import schema from "./schema";
+import { participantKind as resolveKind, SUPPORT_TYPES } from "../shared/participantKinds";
+import { findSport, normalizeSport } from "../shared/sports";
 
 const participantInput = v.object({
   participantKind: v.optional(
-    v.union(v.literal("athlete"), v.literal("performer")),
+    v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
   ),
   performerType: v.optional(
     v.union(
@@ -62,7 +64,7 @@ const listItem = v.object({
   phone: v.string(),
   faculty: v.string(),
   sport: v.string(),
-  participantKind: v.union(v.literal("athlete"), v.literal("performer")),
+  participantKind: v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
   category: v.union(v.string(), v.null()),
   status: v.union(v.literal("incomplete"), v.literal("pending"), v.literal("verified"), v.literal("rejected")),
   hasNationalId: v.boolean(),
@@ -142,8 +144,8 @@ export const list = query({
           email: participant.email ?? "",
           phone: participant.phone ?? "",
           faculty: participant.faculty,
-          sport: participant.sport,
-          participantKind: participant.participantKind ?? "athlete",
+          sport: resolveKind(participant) === "support" ? "Support team" : participant.sport,
+          participantKind: resolveKind(participant),
           category: participant.category ?? null,
           status: participant.status,
           hasNationalId: Boolean(participant.nationalIdImageId),
@@ -278,6 +280,43 @@ export const exportSelected = query({
   },
 });
 
+export const createParticipant = mutation({
+  args: { participant: participantInput },
+  returns: v.id("participants"),
+  handler: async (ctx, { participant: row }) => {
+    const staff = await requireEditor(ctx);
+    const studentId = row.studentId.trim();
+    const fullNameThai = row.fullNameThai.trim();
+    const fullNameEnglish = row.fullNameEnglish.trim();
+    const faculty = row.faculty.trim();
+    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
+    if (!fullNameThai || !fullNameEnglish) throw new Error("Thai and English names are required");
+    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new Error("Choose a supported faculty");
+    const participantKind = resolveKind(row);
+    if (participantKind === "performer" && !row.performerType) throw new Error("Choose a performer team");
+    const sportDefinition = findSport(row.sport);
+    const category = row.category?.trim();
+    if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new Error("Choose Camera or Support team");
+    if (participantKind === "athlete" && (!sportDefinition || !category || !sportDefinition.types.includes(category))) throw new Error("Choose a sport and event type");
+    const duplicate = await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).unique();
+    if (duplicate) throw new Error("A participant already uses this Student ID. Open the existing record to edit it.");
+    const phone = normalizePhone(row.phone, studentId);
+    const email = row.email?.trim().toLowerCase() || undefined;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Please enter a valid email address");
+    const last = await ctx.db.query("participants").withIndex("by_orderNumber").order("desc").first();
+    const now = Date.now();
+    const participantId = await ctx.db.insert("participants", {
+      ...row, studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
+      performerType: participantKind === "performer" ? row.performerType : undefined,
+      sport: participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name,
+      category, phone, email, status: "incomplete", source: "staff",
+      orderNumber: (last?.orderNumber ?? 0) + 1, updatedAt: now, updatedBy: staff.userId,
+    });
+    await ctx.db.insert("auditEvents", { action: "staff_participant_created", ipAddress: "authenticated-staff-session", participantId, staffUserId: staff.userId, successful: true, attempts: 1, createdAt: now });
+    return participantId;
+  },
+});
+
 export const importBatch = mutation({
   args: { participants: v.array(participantInput) },
   returns: v.object({ created: v.number(), updated: v.number() }),
@@ -302,14 +341,17 @@ export const importBatch = mutation({
       ].includes(faculty)) {
         throw new Error(`Student ID ${studentId} has an unsupported faculty`);
       }
+      if (resolveKind(row) === "support" && !SUPPORT_TYPES.includes(row.category?.trim() ?? "")) throw new Error(`Student ID ${studentId}: Choose Camera or Support team`);
       const existing = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
       const email = rawEmail?.trim().toLowerCase() || undefined;
       const data = {
         ...participantFields,
+        sport: resolveKind(row) === "support" ? "Support team" : row.performerType ?? normalizeSport(row.sport),
+        performerType: resolveKind(row) === "support" ? undefined : row.performerType,
         faculty,
-        participantKind: row.performerType ? "performer" as const : "athlete" as const,
+        participantKind: resolveKind(row) === "support" ? "support" as const : row.performerType ? "performer" as const : "athlete" as const,
         studentId,
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
@@ -362,7 +404,7 @@ export const updateStatus = mutation({
 export const updateParticipant = mutation({
   args: {
     participantId: v.id("participants"),
-    participantKind: v.union(v.literal("athlete"), v.literal("performer")),
+    participantKind: v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
     performerType: v.optional(
       v.union(
         v.literal("Katakorn"),
@@ -399,7 +441,7 @@ export const updateParticipant = mutation({
     const fullNameThai = args.fullNameThai.trim();
     const fullNameEnglish = args.fullNameEnglish.trim();
     const faculty = args.faculty.trim();
-    const sport = args.sport.trim();
+    const sport = normalizeSport(args.sport);
     if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish || !faculty || !sport) {
       throw new Error("Student ID, names, faculty, and activity are required");
@@ -407,6 +449,8 @@ export const updateParticipant = mutation({
     if (args.participantKind === "performer" && !args.performerType) {
       throw new Error("Choose a performer team");
     }
+
+    if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new Error("Choose Camera or Support team");
 
     if (studentId !== participant.studentId) {
       const duplicate = await ctx.db
@@ -432,7 +476,7 @@ export const updateParticipant = mutation({
       nicknameEnglish: args.nicknameEnglish?.trim() || undefined,
       sex: args.sex?.trim() || undefined,
       faculty,
-      sport: args.participantKind === "performer" && args.performerType
+      sport: args.participantKind === "support" ? "Support team" : args.participantKind === "performer" && args.performerType
         ? args.performerType
         : sport,
       category: args.category?.trim() || undefined,

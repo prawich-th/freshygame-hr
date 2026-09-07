@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
+
   return (
     <Link href="/" className={`brand ${compact ? "brand--compact" : ""}`}>
       <span className="brand__mark"><span>FG</span><small>26</small></span>
@@ -8,3 +9,4 @@ export function Brand({ compact = false }: { compact?: boolean }) {
     </Link>
   );
 }
+

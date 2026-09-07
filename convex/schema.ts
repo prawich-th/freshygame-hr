@@ -78,7 +78,7 @@ export default defineSchema({
 
   participants: defineTable({
     participantKind: v.optional(
-      v.union(v.literal("athlete"), v.literal("performer")),
+      v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
     ),
     performerType: v.optional(
       v.union(

@@ -1,3 +1,4 @@
+import { participantKind } from "@/shared/participantKinds";
 import type { Doc } from "@/convex/_generated/dataModel";
 
 export type ParticipantPdfEntry = {
@@ -107,11 +108,11 @@ export async function generateParticipantPdf(
     pdf.setFont("THSarabunNew", "normal");
     pdf.setFontSize(17);
     pdf.text("คณะทำงานทีมสีน้ำตาล", 105, 16, { align: "center" });
-    pdf.text(`เอกสารหมายเลข ${participant.orderNumber ?? index + 1}`, 192, 16, { align: "right" });
+    pdf.text(`เอกสารหมายเลข ${participantKind(participant) === "support" ? 3 : participantKind(participant) === "performer" ? 2 : 1}`, 192, 16, { align: "right" });
     pdf.text("โครงการ TU Freshy Game 2026", 105, 24, { align: "center" });
     pdf.setFont("THSarabunNew", "bold");
     pdf.setFontSize(20);
-    pdf.text(participant.participantKind === "performer" ? "แบบรายงานบันทึกข้อมูลผู้แสดง" : "แบบรายงานบันทึกข้อมูลผู้เข้าร่วมการแข่งขัน", 105, 36, { align: "center" });
+    pdf.text(participantKind(participant) === "support" ? "แบบรายงานบันทึกข้อมูลทีมสนับสนุน" : participant.participantKind === "performer" ? "แบบรายงานบันทึกข้อมูลผู้แสดง" : "แบบรายงานบันทึกข้อมูลผู้เข้าร่วมการแข่งขัน", 105, 36, { align: "center" });
 
     const profileX = 18;
     const profileY = 46;
@@ -155,8 +156,8 @@ export async function generateParticipantPdf(
     tableText(pdf, "คณะ", tableX + 1.5, tableY + rowHeight * 4 + 6.9);
     tableText(pdf, participant.faculty || "-", tableX + labelWidth + 1.5, tableY + rowHeight * 4 + 6.9, tableWidth - labelWidth - 3);
 
-    simpleTableRow(pdf, participant.participantKind === "performer" ? "รายการแสดง" : "รายการกีฬา", participant.sport || "-", 18, 108, 174, 10.5, 36);
-    simpleTableRow(pdf, "ประเภทผู้เข้าร่วม", participant.participantKind === "performer" ? "Performer" : participant.category || "Athlete / Participant", 18, 118.5, 174, 10.5, 36);
+    simpleTableRow(pdf, participantKind(participant) === "support" ? "ทีมสนับสนุน" : participant.participantKind === "performer" ? "รายการแสดง" : "รายการกีฬา", participantKind(participant) === "support" ? "Support team" : participant.sport || "-", 18, 108, 174, 10.5, 36);
+    simpleTableRow(pdf, "ประเภทผู้เข้าร่วม", participantKind(participant) === "support" ? participant.category || "Support team" : participant.participantKind === "performer" ? "Performer" : participant.category || "Athlete / Participant", 18, 118.5, 174, 10.5, 36);
 
     pdf.setFont("THSarabunNew", "normal");
     pdf.setFontSize(17);
