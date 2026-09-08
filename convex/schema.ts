@@ -5,6 +5,7 @@ const role = v.union(
   v.literal("admin"),
   v.literal("registrar"),
   v.literal("viewer"),
+  v.literal("co-sport"),
 );
 
 const status = v.union(
@@ -76,6 +77,15 @@ export default defineSchema({
     attempts: v.number(),
   }).index("identifier", ["identifier"]),
 
+  participantRemovalJobs: defineTable({
+    participantIds: v.array(v.id("participants")),
+    nextIndex: v.number(),
+    removeCount: v.number(),
+    keepCount: v.number(),
+    status: v.union(v.literal("running"), v.literal("paused"), v.literal("complete")),
+    createdBy: v.id("users"),
+  }).index("by_status", ["status"]),
+
   participants: defineTable({
     participantKind: v.optional(
       v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
@@ -116,13 +126,22 @@ export default defineSchema({
     updatedAt: v.number(),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_profilePhotoId", ["profilePhotoId"])
+    .index("by_nationalIdImageId", ["nationalIdImageId"])
+    .index("by_studentIdImageId", ["studentIdImageId"])
     .index("by_studentId", ["studentId"])
     .index("by_orderNumber", ["orderNumber"])
     .index("by_status", ["status"])
     .index("by_sport", ["sport"])
     .searchIndex("search_studentId", { searchField: "studentId" })
     .searchIndex("search_fullNameThai", { searchField: "fullNameThai" })
-    .searchIndex("search_fullNameEnglish", { searchField: "fullNameEnglish" }),
+    .searchIndex("search_fullNameEnglish", { searchField: "fullNameEnglish" })
+    .searchIndex("search_nicknameThai", { searchField: "nicknameThai" })
+    .searchIndex("search_nicknameEnglish", { searchField: "nicknameEnglish" })
+    .searchIndex("search_email", { searchField: "email" })
+    .searchIndex("search_phone", { searchField: "phone" })
+    .searchIndex("search_faculty", { searchField: "faculty" })
+    .searchIndex("search_sport", { searchField: "sport" }),
 
   auditEvents: defineTable({
     action: v.string(),

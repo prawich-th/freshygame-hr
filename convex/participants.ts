@@ -1,7 +1,8 @@
+import { internal } from "./_generated/api";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireEditor, requireStaff } from "./access";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { requireAdmin, requireEditor, requireStaff, requireRecordsAccess } from "./access";
 import schema from "./schema";
 import { participantKind as resolveKind, SUPPORT_TYPES } from "../shared/participantKinds";
 import { findSport, normalizeSport } from "../shared/sports";
@@ -93,7 +94,7 @@ export const currentStaff = query({
       id: v.id("users"),
       name: v.string(),
       email: v.string(),
-      role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer")),
+      role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer"), v.literal("co-sport")),
       canBootstrap: v.boolean(),
     }),
   ),
@@ -106,7 +107,7 @@ export const currentStaff = query({
         name: user.name ?? "Staff member",
         email: user.email ?? "",
         role,
-        canBootstrap: admin === null,
+        canBootstrap: admin === null && role !== "co-sport",
       };
     } catch {
       return null;
@@ -118,7 +119,7 @@ export const bootstrapAdmin = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    const staff = await requireStaff(ctx);
+    const staff = await requireRecordsAccess(ctx);
     const admin = await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", "admin")).first();
     if (admin) throw new ConvexError("An administrator already exists");
     await ctx.db.patch("users", staff.userId, { role: "admin" });
@@ -130,7 +131,7 @@ export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(listItem),
   handler: async (ctx, args) => {
-    await requireStaff(ctx);
+    await requireRecordsAccess(ctx);
     const page = await ctx.db.query("participants").order("desc").paginate(args.paginationOpts);
     return {
       ...page,
@@ -205,7 +206,7 @@ export const get = query({
   args: { participantId: v.id("participants") },
   returns: v.union(v.null(), v.object({ participant: schema.doc("participants"), photoUrl: v.union(v.string(), v.null()), nationalIdImageUrl: v.union(v.string(), v.null()), studentIdImageUrl: v.union(v.string(), v.null()) })),
   handler: async (ctx, args) => {
-    const staff = await requireStaff(ctx);
+    const staff = await requireRecordsAccess(ctx);
     const participant = await ctx.db.get("participants", args.participantId);
     if (!participant) return null;
     const protectedParticipant = staff.role === "viewer"
@@ -224,7 +225,7 @@ export const stats = query({
   args: {},
   returns: v.object({ total: v.number(), complete: v.number(), pending: v.number(), sports: v.number() }),
   handler: async (ctx) => {
-    await requireStaff(ctx);
+    await requireRecordsAccess(ctx);
     const participants = await ctx.db.query("participants").order("desc").take(1000);
     return {
       total: participants.length,
@@ -239,7 +240,7 @@ export const exportSport = query({
   args: { sport: v.string() },
   returns: v.array(v.object({ participant: schema.doc("participants"), photoUrl: v.union(v.string(), v.null()), nationalIdImageUrl: v.union(v.string(), v.null()), studentIdImageUrl: v.union(v.string(), v.null()) })),
   handler: async (ctx, args) => {
-    const staff = await requireStaff(ctx);
+    const staff = await requireRecordsAccess(ctx);
     const participants = await ctx.db
       .query("participants")
       .withIndex("by_sport", (q) => q.eq("sport", args.sport))
@@ -259,7 +260,7 @@ export const exportSelected = query({
   args: { participantIds: v.array(v.id("participants")) },
   returns: v.array(v.object({ participant: schema.doc("participants"), photoUrl: v.union(v.string(), v.null()), nationalIdImageUrl: v.union(v.string(), v.null()), studentIdImageUrl: v.union(v.string(), v.null()) })),
   handler: async (ctx, args) => {
-    const staff = await requireStaff(ctx);
+    const staff = await requireRecordsAccess(ctx);
     if (args.participantIds.length === 0) return [];
     if (args.participantIds.length > 50) throw new ConvexError("Export at most 50 participants per PDF");
 
@@ -559,7 +560,7 @@ export const completeStaffUpload = mutation({
 
 export const listStaff = query({
   args: {},
-  returns: v.array(v.object({ id: v.id("users"), name: v.string(), email: v.string(), role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer")), active: v.boolean() })),
+  returns: v.array(v.object({ id: v.id("users"), name: v.string(), email: v.string(), role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer"), v.literal("co-sport")), active: v.boolean() })),
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const users = await ctx.db.query("users").take(100);
@@ -568,7 +569,7 @@ export const listStaff = query({
 });
 
 export const updateStaffRole = mutation({
-  args: { userId: v.id("users"), role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer")), active: v.boolean() },
+  args: { userId: v.id("users"), role: v.union(v.literal("admin"), v.literal("registrar"), v.literal("viewer"), v.literal("co-sport")), active: v.boolean() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const staff = await requireAdmin(ctx);
@@ -624,5 +625,112 @@ export const listAuditEvents = query({
         };
       })),
     };
+  },
+});
+
+// A bounded snapshot makes the confirmation exact; never silently prune a partial list.
+const MAX_REMOVAL_REVIEW = 5000;
+export const removalCandidates = query({
+  args: {},
+  returns: v.array(v.object({ id: v.id("participants"), studentId: v.string(), name: v.string(), thaiName: v.string(), sport: v.string() })),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const rows = await ctx.db.query("participants").withIndex("by_creation_time").take(MAX_REMOVAL_REVIEW + 1);
+    if (rows.length > MAX_REMOVAL_REVIEW) throw new ConvexError("Selection mode supports up to 5,000 participants. No records have been removed. Contact the system administrator for a larger cleanup.");
+    return rows.map(p => ({id: p._id, studentId: p.studentId, name: p.fullNameEnglish, thaiName: p.fullNameThai, sport: p.sport}));
+  },
+});
+
+export const latestRemoval = query({
+  args: {},
+  returns: v.union(v.null(), v.object({ id: v.id("participantRemovalJobs"), processed: v.number(), removeCount: v.number(), keepCount: v.number(), status: v.union(v.literal("running"), v.literal("paused"), v.literal("complete")) })),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const job = await ctx.db.query("participantRemovalJobs").withIndex("by_creation_time").order("desc").first();
+    return job ? {id: job._id, processed: job.nextIndex, removeCount: job.removeCount, keepCount: job.keepCount, status: job.status} : null;
+  },
+});
+
+export const keepOnlySelected = mutation({
+  args: { keepIds: v.array(v.id("participants")), reviewedIds: v.array(v.id("participants")), confirmation: v.string() },
+  returns: v.id("participantRemovalJobs"),
+  handler: async (ctx, args) => {
+    const staff = await requireAdmin(ctx);
+    if (args.confirmation !== "REMOVE OTHERS") throw new ConvexError("Type REMOVE OTHERS to confirm this removal.");
+    const keep = new Set(args.keepIds);
+    if (!keep.size) throw new ConvexError("Select at least one participant to keep. Nothing has been removed.");
+    if (args.reviewedIds.length > MAX_REMOVAL_REVIEW || args.keepIds.length > MAX_REMOVAL_REVIEW) throw new ConvexError("Selection mode supports up to 5,000 participants. Nothing has been removed.");
+    for (const status of ["running", "paused"] as const) {
+      if (await ctx.db.query("participantRemovalJobs").withIndex("by_status", q => q.eq("status", status)).first()) throw new ConvexError("A removal is already in progress. Finish or resume it before starting another.");
+    }
+    const rows = await ctx.db.query("participants").withIndex("by_creation_time").take(MAX_REMOVAL_REVIEW + 1);
+    const current = new Set(rows.map(p => p._id));
+    const reviewed = new Set(args.reviewedIds);
+    if (rows.length > MAX_REMOVAL_REVIEW || reviewed.size !== current.size || [...current].some(id => !reviewed.has(id)) || [...keep].some(id => !current.has(id))) throw new ConvexError("The participant list changed after your review. Close selection mode and reopen it to review the updated list before removing anyone.");
+    const participantIds = rows.filter(p => !keep.has(p._id)).map(p => p._id);
+    if (!participantIds.length) throw new ConvexError("All participants are selected to keep. There is nobody to remove.");
+    const jobId = await ctx.db.insert("participantRemovalJobs", {participantIds, nextIndex: 0, removeCount: participantIds.length, keepCount: keep.size, status: "running", createdBy: staff.userId});
+    await ctx.db.insert("auditEvents", {action: `participant_removal_started_keep_${keep.size}_remove_${participantIds.length}`, ipAddress: "authenticated-staff-session", staffUserId: staff.userId, successful: true, attempts: 1, createdAt: Date.now()});
+    await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
+    return jobId;
+  },
+});
+
+export const resumeRemoval = mutation({
+  args: { jobId: v.id("participantRemovalJobs") }, returns: v.null(),
+  handler: async (ctx, {jobId}) => {
+    await requireAdmin(ctx);
+    const job = await ctx.db.get("participantRemovalJobs", jobId);
+    if (!job || job.status !== "paused") throw new ConvexError("This removal is not paused. Refresh the page to see its current progress.");
+    await ctx.db.patch("participantRemovalJobs", jobId, {status: "running"});
+    await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
+    return null;
+  },
+});
+
+export const runRemoval = internalMutation({
+  args: {jobId: v.id("participantRemovalJobs")}, returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    try { await ctx.runMutation(internal.participants.removalBatch, args); }
+    catch {
+      // Subtransaction rolls back the failed batch; earlier batches remain complete.
+      await ctx.db.patch("participantRemovalJobs", args.jobId, {status: "paused"});
+    }
+    return null;
+  },
+});
+
+export const removalBatch = internalMutation({
+  args: {jobId: v.id("participantRemovalJobs")}, returns: v.null(),
+  handler: async (ctx, {jobId}): Promise<null> => {
+    const job = await ctx.db.get("participantRemovalJobs", jobId);
+    if (!job || job.status !== "running") return null;
+    let nextIndex = job.nextIndex;
+    for (let count = 0; count < 10 && nextIndex < job.participantIds.length; count++) {
+      const id = job.participantIds[nextIndex];
+      const participant = await ctx.db.get("participants", id);
+      if (participant) {
+        await ctx.db.delete("participants", id);
+        for (const fileId of new Set([participant.profilePhotoId, participant.nationalIdImageId, participant.studentIdImageId])) {
+          if (!fileId) continue;
+          // Preserve any image also referenced by a retained participant.
+          const refs = await Promise.all([
+            ctx.db.query("participants").withIndex("by_profilePhotoId", q => q.eq("profilePhotoId", fileId)).first(),
+            ctx.db.query("participants").withIndex("by_nationalIdImageId", q => q.eq("nationalIdImageId", fileId)).first(),
+            ctx.db.query("participants").withIndex("by_studentIdImageId", q => q.eq("studentIdImageId", fileId)).first(),
+          ]);
+          if (!refs.some(Boolean)) await ctx.storage.delete(fileId);
+        }
+      }
+      const sessions = await ctx.db.query("uploadSessions").withIndex("by_participantId", q => q.eq("participantId", id)).take(50);
+      for (const session of sessions) await ctx.db.delete("uploadSessions", session._id);
+      if (sessions.length === 50) break; // Continue this participant's remaining sessions next batch.
+      nextIndex++;
+    }
+    const complete = nextIndex === job.participantIds.length;
+    await ctx.db.patch("participantRemovalJobs", jobId, {nextIndex, status: complete ? "complete" : "running", ...(complete ? {participantIds: []} : {})});
+    if (complete) await ctx.db.insert("auditEvents", {action: `participant_removal_completed_${job.removeCount}`, ipAddress: "authenticated-staff-session", staffUserId: job.createdBy, successful: true, attempts: 1, createdAt: Date.now()});
+    else await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
+    return null;
   },
 });

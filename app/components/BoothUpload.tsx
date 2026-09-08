@@ -107,7 +107,7 @@ function BoothWorkspace() {
   const searchTerm = search.trim();
   const isNumericSearch = /^\d+$/.test(searchTerm);
   const minimumSearchLength = isNumericSearch ? 5 : 2;
-  const canSearch = Boolean(current && current.role !== "viewer" && searchTerm.length >= minimumSearchLength && !selectedId);
+  const canSearch = Boolean(current && (current.role === "admin" || current.role === "registrar") && searchTerm.length >= minimumSearchLength && !selectedId);
   const results = useQuery(api.participants.boothSearch, canSearch ? { search: searchTerm } : "skip");
   const detail = useQuery(api.participants.get, selectedId ? { participantId: selectedId } : "skip");
   const generateUploadUrl = useMutation(api.participants.generateStaffUploadUrl);
@@ -198,7 +198,7 @@ function BoothWorkspace() {
 
   if (current === undefined) return <BoothLoading />;
   if (current === null) return <AccessMessage title="Access unavailable" body="Your staff account is not active. Contact an administrator." onSignOut={() => void signOut()} />;
-  if (current.role === "viewer") return <AccessMessage title="Upload access required" body="Viewer accounts cannot retrieve or upload identity documents. Ask an administrator for registrar access." onSignOut={() => void signOut()} />;
+  if (current.role === "viewer" || current.role === "co-sport") return <AccessMessage title="Upload access required" body="Viewer and Co-sport accounts cannot retrieve or upload identity documents. Ask an administrator for registrar access." onSignOut={() => void signOut()} />;
 
   const participant = detail?.participant;
   const existing = {
