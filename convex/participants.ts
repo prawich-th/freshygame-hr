@@ -292,7 +292,7 @@ export const createParticipant = mutation({
     const faculty = row.faculty.trim();
     if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish) throw new ConvexError("Thai and English names are required");
-    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
+    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
     const participantKind = resolveKind(row);
     if (participantKind === "performer" && !row.performerType) throw new ConvexError("Choose a performer team");
     const sportDefinition = findSport(row.sport);
@@ -338,7 +338,7 @@ export const importBatch = mutation({
       if (![
         "คณะแพทยศาสตร์",
         "คณะศิลปศาสตร์",
-        "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์",
+        "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์",
       ].includes(faculty)) {
         throw new ConvexError(`Student ID ${studentId} has an unsupported faculty`);
       }
@@ -422,7 +422,7 @@ export const updateParticipant = mutation({
     faculty: v.union(
       v.literal("คณะแพทยศาสตร์"),
       v.literal("คณะศิลปศาสตร์"),
-      v.literal("คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"),
+      v.literal("วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"),
     ),
     sport: v.string(),
     category: v.optional(v.string()),

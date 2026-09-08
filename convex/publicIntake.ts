@@ -52,7 +52,7 @@ export const registerPerformer = mutation({
     faculty: v.union(
       v.literal("คณะแพทยศาสตร์"),
       v.literal("คณะศิลปศาสตร์"),
-      v.literal("คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"),
+      v.literal("วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"),
     ),
     phone: v.string(),
     email: v.string(),

@@ -23,7 +23,7 @@ import { Brand } from "./Brand";
 type PerformerType = "Katakorn" | "Cheerleader";
 type Sex = "Male" | "Female" | "Non-binary" | "Prefer not to say";
 type PreferredContact = "Phone" | "LINE" | "Instagram" | "Email";
-type Faculty = "คณะแพทยศาสตร์" | "คณะศิลปศาสตร์" | "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์";
+type Faculty = "คณะแพทยศาสตร์" | "คณะศิลปศาสตร์" | "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์";
 type Registration = {
   sessionId: Id<"uploadSessions">;
   name: string;
@@ -181,7 +181,7 @@ export function PerformerRegistration() {
               </div>
               <div className="form-grid">
                 <Field name="studentId" label="รหัสนักศึกษา / Student ID" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="6909680123" />
-                <div className="field"><label>คณะ / Faculty <span>*</span></label><select className="select registration-select" name="faculty" required defaultValue=""><option value="" disabled>เลือกคณะ / Select faculty</option><option value="คณะแพทยศาสตร์">คณะแพทยศาสตร์</option><option value="คณะศิลปศาสตร์">คณะศิลปศาสตร์</option><option value="คณะแพทยศาสตร์นานาชาติจุฬาภรณ์">คณะแพทยศาสตร์นานาชาติจุฬาภรณ์</option></select></div>
+                <div className="field"><label>คณะ / Faculty <span>*</span></label><select className="select registration-select" name="faculty" required defaultValue=""><option value="" disabled>เลือกคณะ / Select faculty</option><option value="คณะแพทยศาสตร์">คณะแพทยศาสตร์</option><option value="คณะศิลปศาสตร์">คณะศิลปศาสตร์</option><option value="วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์">วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์</option></select></div>
                 <Field name="fullNameThai" label="ชื่อ-สกุล (ไทย) / Thai full name" required placeholder="ชื่อ นามสกุล" />
                 <Field name="nicknameThai" label="ชื่อเล่น (ไทย) / Thai nickname" placeholder="ชื่อเล่น" />
                 <Field name="fullNameEnglish" label="Full name (English)" required placeholder="Name Surname" />
