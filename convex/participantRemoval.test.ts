@@ -20,12 +20,12 @@ async function setup() {
 
 test("only admins can review or remove; empty selection and invalid confirmation do nothing", async () => {
   const {t, ids, admin} = await setup();
-  const args = {keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"};
+  const args = {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"};
   await expect(t.mutation(api.participants.keepOnlySelected, args)).rejects.toThrow("Authentication required");
   const registrar = t.withIdentity({subject:`${ids.registrar}|session`});
-  await expect(registrar.query(api.participants.removalCandidates, {})).rejects.toThrow("Administrator access required");
+  await expect(registrar.query(api.participants.removalCandidates, {sport:"Volleyball"})).rejects.toThrow("Administrator access required");
   await expect(registrar.mutation(api.participants.keepOnlySelected, args)).rejects.toThrow("Administrator access required");
-  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, keepIds:[]})).rejects.toThrow("at least one");
+  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, sport:"Volleyball", keepIds:[]})).rejects.toThrow("at least one");
   await expect(admin.mutation(api.participants.keepOnlySelected, {...args, confirmation:"yes"})).rejects.toThrow("REMOVE OTHERS");
   expect(await t.run(ctx => ctx.db.get("participants", ids.remove))).not.toBeNull();
 });
@@ -33,11 +33,11 @@ test("only admins can review or remove; empty selection and invalid confirmation
 test("stale membership, foreign keep IDs, and keeping everyone are rejected", async () => {
   const {t, ids, admin} = await setup();
   const extra = await t.run(ctx => ctx.db.insert("participants", row("6909680003")));
-  const args = {keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"};
+  const args = {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"};
   await expect(admin.mutation(api.participants.keepOnlySelected, args)).rejects.toThrow("list changed");
   await t.run(ctx => ctx.db.delete("participants", extra));
-  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, keepIds:[extra]})).rejects.toThrow("list changed");
-  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, keepIds:[ids.keep,ids.remove]})).rejects.toThrow("nobody to remove");
+  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, sport:"Volleyball", keepIds:[extra]})).rejects.toThrow("list changed");
+  await expect(admin.mutation(api.participants.keepOnlySelected, {...args, sport:"Volleyball", keepIds:[ids.keep,ids.remove]})).rejects.toThrow("nobody to remove");
 });
 
 test("removes the exact snapshot, cleans all sessions and unshared images, preserves selected and new records", async () => {
@@ -52,9 +52,9 @@ test("removes the exact snapshot, cleans all sessions and unshared images, prese
     for (let i=0;i<120;i++) await ctx.db.insert("uploadSessions", {participantId:ids.remove, auditEventId:audit, used:false, expiresAt:99999});
     return {shared,removed,audit};
   });
-  const jobId = await admin.mutation(api.participants.keepOnlySelected, {keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"});
+  const jobId = await admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"});
   const newId = await t.run(ctx => ctx.db.insert("participants", row("6909680004")));
-  await expect(admin.mutation(api.participants.keepOnlySelected, {keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove,newId], confirmation:"REMOVE OTHERS"})).rejects.toThrow("already in progress");
+  await expect(admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove,newId], confirmation:"REMOVE OTHERS"})).rejects.toThrow("already in progress");
   await t.finishAllScheduledFunctions(() => vi.runAllTimers());
   await t.run(async ctx => {
     expect(await ctx.db.get("participants", ids.keep)).not.toBeNull();
@@ -76,4 +76,27 @@ test("a paused job resumes without removing retained participants", async () => 
   await t.finishAllScheduledFunctions(() => vi.runAllTimers());
   expect(await admin.query(api.participants.latestRemoval, {})).toMatchObject({status:"complete",processed:1});
   expect(await t.run(ctx => ctx.db.get("participants",ids.keep))).not.toBeNull();
+});
+
+test("sport review excludes other sports and forged cross-sport selections are rejected", async () => {
+  vi.useFakeTimers();
+  const {t, ids, admin} = await setup();
+  const other = await t.run(ctx => ctx.db.insert("participants", {...row("6909680999"), sport:"Swimming"}));
+  const candidates = await admin.query(api.participants.removalCandidates, {sport:"Volleyball"});
+  expect(candidates.map(p => p.id).sort()).toEqual([ids.keep,ids.remove].sort());
+  await expect(admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[other], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"})).rejects.toThrow("list changed");
+  await admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"});
+  await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  expect(await t.run(ctx => ctx.db.get("participants",other))).not.toBeNull();
+  expect(await t.run(ctx => ctx.db.get("participants",ids.remove))).toBeNull();
+});
+
+test("participants moved to a different sport after confirmation are not deleted", async () => {
+  vi.useFakeTimers();
+  const {t, ids, admin} = await setup();
+  await admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[ids.keep], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"});
+  await t.run(ctx => ctx.db.patch("participants", ids.remove, {sport:"Swimming"}));
+  await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  expect(await t.run(ctx => ctx.db.get("participants",ids.remove))).toMatchObject({sport:"Swimming"});
+  expect(await admin.query(api.participants.latestRemoval, {})).toMatchObject({status:"complete",skippedCount:1,sport:"Volleyball"});
 });

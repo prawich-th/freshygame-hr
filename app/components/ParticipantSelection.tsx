@@ -1,5 +1,7 @@
 "use client";
 
+import { SPORTS } from "@/shared/sports";
+import Link from "next/link";
 import { useState } from "react";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -8,7 +10,8 @@ import { errorMessage } from "../lib/errors";
 
 type Candidate = {id: Id<"participants">; studentId: string; name: string; thaiName: string; sport: string};
 
-export function ParticipantSelection({onOpen}: {onOpen: () => void}) {
+export function ParticipantSelection() {
+  const [sport, setSport] = useState("");
   const convex = useConvex();
   const remove = useMutation(api.participants.keepOnlySelected);
   const resume = useMutation(api.participants.resumeRemoval);
@@ -28,8 +31,8 @@ export function ParticipantSelection({onOpen}: {onOpen: () => void}) {
   async function open() {
     setBusy(true); setError("");
     try {
-      const participants = await convex.query(api.participants.removalCandidates, {});
-      setRows(participants); setKeep(new Set()); setStage("select"); setSearch(""); setLimit(100); setConfirmation(""); onOpen();
+      const participants = await convex.query(api.participants.removalCandidates, {sport});
+      setRows(participants); setKeep(new Set()); setStage("select"); setSearch(""); setLimit(100); setConfirmation("");
     } catch (e) { setError(errorMessage(e, "Load participants for selection")); }
     finally { setBusy(false); }
   }
@@ -38,7 +41,7 @@ export function ParticipantSelection({onOpen}: {onOpen: () => void}) {
     if (!rows) return;
     setBusy(true); setError("");
     try {
-      await remove({keepIds: [...keep], reviewedIds: rows.map(p => p.id), confirmation});
+      await remove({sport, keepIds: [...keep], reviewedIds: rows.map(p => p.id), confirmation});
       setRows(null);
     } catch (e) { setError(errorMessage(e, "Remove unselected participants")); }
     finally { setBusy(false); }
@@ -50,18 +53,20 @@ export function ParticipantSelection({onOpen}: {onOpen: () => void}) {
     catch (e) { setError(errorMessage(e, "Resume participant removal")); }
     finally { setBusy(false); }
   }
-  return <section style={{marginBottom:16}}>
-    <button className="button button--soft" disabled={busy || active || job === undefined} onClick={() => void open()}>{busy && !rows ? "Loading…" : "Selection mode — keep selected"}</button>
+  return <section className="content-card" style={{marginBottom:16}}>
+    <Link href="/staff" className="button button--ghost">← Back to participants</Link>
+    <div className="field" style={{margin:"16px 0"}}><label htmlFor="selection-sport">Sport / activity</label><select id="selection-sport" className="select" value={sport} disabled={busy || active} onChange={e => {setSport(e.target.value);setRows(null);setKeep(new Set());setError("");}}><option value="">Choose a sport or activity</option>{SPORTS.map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}{["Katakorn", "Cheerleader", "Parade", "Support team"].map(value => <option key={value}>{value}</option>)}</select></div>
+    <button className="button button--soft" disabled={!sport || busy || active || job === undefined} onClick={() => void open()}>{busy && !rows ? "Loading…" : `Load ${sport || "sport"} participants`}</button>
     {job && <div className={`notice ${job.status === "complete" ? "notice--success" : "notice--info"}`} role="status" style={{marginTop:12}}>
-      {job.status === "complete" ? `Removal complete: ${job.removeCount} participants removed; ${job.keepCount} selected participants kept.` : `${job.processed} of ${job.removeCount} removals completed. ${job.status === "paused" ? "The last batch could not finish. Resume to retry the remaining records." : "Removal continues if you leave this page."}`}
+      {job.status === "complete" ? `${job.sport ?? "Previous removal"}: ${job.removeCount - job.skippedCount} participants removed; ${job.keepCount} selected participants kept.${job.skippedCount ? ` ${job.skippedCount} participants moved to another sport and were left untouched.` : ""}` : `${job.sport ?? "Previous removal"}: ${job.processed} of ${job.removeCount} removals completed. ${job.status === "paused" ? "The last batch could not finish. Resume to retry the remaining records." : "Removal continues if you leave this page."}`}
       {job.status === "paused" && <button className="button button--soft" disabled={busy} onClick={() => void resumeJob()}>Resume removal</button>}
     </div>}
     {error && !rows && <div className="notice notice--error" role="alert">{error}</div>}
-    {rows && <><div className="drawer-backdrop"/><aside className="drawer" style={{width:"min(900px, 100vw)"}} role="dialog" aria-modal="true" aria-labelledby="selection-title">
-      <div className="drawer__head"><h2 id="selection-title">{stage === "select" ? "Choose participants to keep" : "Review permanent removal"}</h2><button disabled={busy} onClick={() => setRows(null)} aria-label="Close selection">✕</button></div>
+    {rows && <section aria-labelledby="selection-title">
+      <div className="drawer__head"><h2 id="selection-title">{sport} — {stage === "select" ? "Choose participants to keep" : "Review permanent removal"}</h2><button disabled={busy} onClick={() => setRows(null)} aria-label="Close selection">✕</button></div>
       <div style={{padding:24}}>
         <p><strong>{keep.size} keep · {rows.length - keep.size} remove · {rows.length} total</strong></p>
-        <div className="notice notice--info">This selection covers everyone in the system, including participants hidden by dashboard filters. Checked participants will stay. Everyone else in this review will be permanently removed with their documents and upload sessions. Audit history is retained.</div>
+        <div className="notice notice--info">This selection covers {sport} only. Participants in other sports and activities will stay untouched. Checked participants will stay. Everyone else in this review will be permanently removed with their documents and upload sessions. Audit history is retained.</div>
         {stage === "select" ? <>
           <label htmlFor="keep-search">Find participants to keep</label><input id="keep-search" className="input" placeholder="Name, Student ID, or activity" value={search} onChange={e => {setSearch(e.target.value); setLimit(100);}}/>
           <div style={{display:"flex",gap:8,margin:"12px 0",flexWrap:"wrap"}}><button className="button button--soft" onClick={() => setKeep(current => new Set([...current, ...matches.map(p => p.id)]))}>Keep all {matches.length} matching</button><button className="button button--ghost" onClick={() => setKeep(new Set())}>Clear selection</button></div>
@@ -78,6 +83,6 @@ export function ParticipantSelection({onOpen}: {onOpen: () => void}) {
           {stage === "select" ? <button className="button button--primary" disabled={!keep.size || keep.size === rows.length} onClick={() => {setStage("review");setReviewGroup("remove");setLimit(100);}}>Review removal of {rows.length - keep.size} participants</button> : <button className="button button--danger" disabled={busy || confirmation !== "REMOVE OTHERS"} onClick={() => void confirm()}>{busy ? "Starting removal…" : `Permanently remove ${rows.length - keep.size} participants`}</button>}
         </div>
       </div>
-    </aside></>}
+    </section>}
   </section>;
 }

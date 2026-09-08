@@ -631,11 +631,11 @@ export const listAuditEvents = query({
 // A bounded snapshot makes the confirmation exact; never silently prune a partial list.
 const MAX_REMOVAL_REVIEW = 5000;
 export const removalCandidates = query({
-  args: {},
+  args: { sport: v.string() },
   returns: v.array(v.object({ id: v.id("participants"), studentId: v.string(), name: v.string(), thaiName: v.string(), sport: v.string() })),
-  handler: async (ctx) => {
+  handler: async (ctx, {sport}) => {
     await requireAdmin(ctx);
-    const rows = await ctx.db.query("participants").withIndex("by_creation_time").take(MAX_REMOVAL_REVIEW + 1);
+    const rows = await ctx.db.query("participants").withIndex("by_sport", q => q.eq("sport", sport)).take(MAX_REMOVAL_REVIEW + 1);
     if (rows.length > MAX_REMOVAL_REVIEW) throw new ConvexError("Selection mode supports up to 5,000 participants. No records have been removed. Contact the system administrator for a larger cleanup.");
     return rows.map(p => ({id: p._id, studentId: p.studentId, name: p.fullNameEnglish, thaiName: p.fullNameThai, sport: p.sport}));
   },
@@ -643,16 +643,16 @@ export const removalCandidates = query({
 
 export const latestRemoval = query({
   args: {},
-  returns: v.union(v.null(), v.object({ id: v.id("participantRemovalJobs"), processed: v.number(), removeCount: v.number(), keepCount: v.number(), status: v.union(v.literal("running"), v.literal("paused"), v.literal("complete")) })),
+  returns: v.union(v.null(), v.object({ id: v.id("participantRemovalJobs"), sport: v.optional(v.string()), skippedCount: v.number(), processed: v.number(), removeCount: v.number(), keepCount: v.number(), status: v.union(v.literal("running"), v.literal("paused"), v.literal("complete")) })),
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const job = await ctx.db.query("participantRemovalJobs").withIndex("by_creation_time").order("desc").first();
-    return job ? {id: job._id, processed: job.nextIndex, removeCount: job.removeCount, keepCount: job.keepCount, status: job.status} : null;
+    return job ? {id: job._id, sport: job.sport, skippedCount: job.skippedCount ?? 0, processed: job.nextIndex, removeCount: job.removeCount, keepCount: job.keepCount, status: job.status} : null;
   },
 });
 
 export const keepOnlySelected = mutation({
-  args: { keepIds: v.array(v.id("participants")), reviewedIds: v.array(v.id("participants")), confirmation: v.string() },
+  args: { sport: v.string(), keepIds: v.array(v.id("participants")), reviewedIds: v.array(v.id("participants")), confirmation: v.string() },
   returns: v.id("participantRemovalJobs"),
   handler: async (ctx, args) => {
     const staff = await requireAdmin(ctx);
@@ -663,14 +663,14 @@ export const keepOnlySelected = mutation({
     for (const status of ["running", "paused"] as const) {
       if (await ctx.db.query("participantRemovalJobs").withIndex("by_status", q => q.eq("status", status)).first()) throw new ConvexError("A removal is already in progress. Finish or resume it before starting another.");
     }
-    const rows = await ctx.db.query("participants").withIndex("by_creation_time").take(MAX_REMOVAL_REVIEW + 1);
+    const rows = await ctx.db.query("participants").withIndex("by_sport", q => q.eq("sport", args.sport)).take(MAX_REMOVAL_REVIEW + 1);
     const current = new Set(rows.map(p => p._id));
     const reviewed = new Set(args.reviewedIds);
     if (rows.length > MAX_REMOVAL_REVIEW || reviewed.size !== current.size || [...current].some(id => !reviewed.has(id)) || [...keep].some(id => !current.has(id))) throw new ConvexError("The participant list changed after your review. Close selection mode and reopen it to review the updated list before removing anyone.");
     const participantIds = rows.filter(p => !keep.has(p._id)).map(p => p._id);
     if (!participantIds.length) throw new ConvexError("All participants are selected to keep. There is nobody to remove.");
-    const jobId = await ctx.db.insert("participantRemovalJobs", {participantIds, nextIndex: 0, removeCount: participantIds.length, keepCount: keep.size, status: "running", createdBy: staff.userId});
-    await ctx.db.insert("auditEvents", {action: `participant_removal_started_keep_${keep.size}_remove_${participantIds.length}`, ipAddress: "authenticated-staff-session", staffUserId: staff.userId, successful: true, attempts: 1, createdAt: Date.now()});
+    const jobId = await ctx.db.insert("participantRemovalJobs", {sport: args.sport, skippedCount: 0, participantIds, nextIndex: 0, removeCount: participantIds.length, keepCount: keep.size, status: "running", createdBy: staff.userId});
+    await ctx.db.insert("auditEvents", {action: `participant_removal_${args.sport}_started_keep_${keep.size}_remove_${participantIds.length}`, ipAddress: "authenticated-staff-session", staffUserId: staff.userId, successful: true, attempts: 1, createdAt: Date.now()});
     await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
     return jobId;
   },
@@ -706,9 +706,13 @@ export const removalBatch = internalMutation({
     const job = await ctx.db.get("participantRemovalJobs", jobId);
     if (!job || job.status !== "running") return null;
     let nextIndex = job.nextIndex;
+    let skippedCount = job.skippedCount ?? 0;
     for (let count = 0; count < 10 && nextIndex < job.participantIds.length; count++) {
       const id = job.participantIds[nextIndex];
       const participant = await ctx.db.get("participants", id);
+      if (participant && job.sport && participant.sport !== job.sport) {
+        skippedCount++; nextIndex++; continue;
+      }
       if (participant) {
         await ctx.db.delete("participants", id);
         for (const fileId of new Set([participant.profilePhotoId, participant.nationalIdImageId, participant.studentIdImageId])) {
@@ -728,8 +732,8 @@ export const removalBatch = internalMutation({
       nextIndex++;
     }
     const complete = nextIndex === job.participantIds.length;
-    await ctx.db.patch("participantRemovalJobs", jobId, {nextIndex, status: complete ? "complete" : "running", ...(complete ? {participantIds: []} : {})});
-    if (complete) await ctx.db.insert("auditEvents", {action: `participant_removal_completed_${job.removeCount}`, ipAddress: "authenticated-staff-session", staffUserId: job.createdBy, successful: true, attempts: 1, createdAt: Date.now()});
+    await ctx.db.patch("participantRemovalJobs", jobId, {nextIndex, skippedCount, status: complete ? "complete" : "running", ...(complete ? {participantIds: []} : {})});
+    if (complete) await ctx.db.insert("auditEvents", {action: `participant_removal_completed_${job.removeCount - skippedCount}`, ipAddress: "authenticated-staff-session", staffUserId: job.createdBy, successful: true, attempts: 1, createdAt: Date.now()});
     else await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
     return null;
   },

@@ -78,6 +78,8 @@ export default defineSchema({
   }).index("identifier", ["identifier"]),
 
   participantRemovalJobs: defineTable({
+    sport: v.optional(v.string()),
+    skippedCount: v.optional(v.number()),
     participantIds: v.array(v.id("participants")),
     nextIndex: v.number(),
     removeCount: v.number(),

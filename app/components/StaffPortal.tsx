@@ -6,9 +6,10 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { Activity, BadgeCheck, Bell, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, LogOut, Pencil, Save, ScrollText, Search, Smartphone, UserCog, UsersRound, X } from "lucide-react";
+import { Activity, BadgeCheck, Bell, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, Menu, LogOut, Pencil, Save, ScrollText, Search, Smartphone, UserCog, UsersRound, X } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, type InputHTMLAttributes, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, type InputHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
 import { participantKind, kindLabel, SUPPORT_TYPES, type ParticipantKind } from "@/shared/participantKinds";
 import { SPORTS, findSport, normalizeSport } from "@/shared/sports";
 import { ParticipantSelection } from "./ParticipantSelection";
@@ -22,10 +23,10 @@ type Tab = "directory" | "participants" | "import" | "staff" | "audit";
 const statusLabel = { incomplete: "Incomplete", pending: "Pending review", verified: "Verified", rejected: "Needs correction" };
 const statusClass = { incomplete: "pill--gray", pending: "pill--amber", verified: "pill--green", rejected: "pill--red" };
 
-export function StaffPortal() {
+export function StaffPortal({selectionPage = false}: {selectionPage?: boolean}) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   if (isLoading) return <div className="auth-page"><span className="spinner" style={{color:"#4b2f25"}} /></div>;
-  return isAuthenticated ? <StaffWorkspace /> : <StaffAuth />;
+  return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} /> : <StaffAuth />;
 }
 
 function StaffAuth() {
@@ -57,7 +58,25 @@ function StaffAuth() {
   </section></div></main>;
 }
 
-function StaffWorkspace() {
+function StaffWorkspace({selectionPage}: {selectionPage: boolean}) {
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const sidebar = useRef<HTMLElement>(null);
+  function closeMenu() { setMenuOpen(false); menuButton.current?.focus(); }
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 901px)");
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    sidebar.current?.querySelector<HTMLButtonElement>(".sidebar__close")?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [menuOpen]);
   const { signOut } = useAuthActions();
   const current = useQuery(api.participants.currentStaff);
   const stats = useQuery(api.participants.stats, current && current.role !== "co-sport" ? {} : "skip");
@@ -81,17 +100,27 @@ function StaffWorkspace() {
       { id: "audit" as const, label: "Audit log", icon: ScrollText },
     ] : []),
   ];
-  const title = tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "staff" ? "Staff access control" : "Security audit log";
+  const title = selectionPage ? "Participant selection by sport" : tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "staff" ? "Staff access control" : "Security audit log";
 
   return <main className="staff-shell">
-    <aside className="sidebar"><Brand compact/><nav className="sidebar__nav">{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={17}/><span>{label}</span></button>)}</nav>
+    <aside ref={sidebar} id="staff-sidebar" className={`sidebar ${menuOpen ? "sidebar--open" : ""}`} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? true : undefined} aria-label="Staff navigation" onKeyDown={event => {
+      if (!menuOpen) return;
+      if (event.key === "Escape") { event.preventDefault(); closeMenu(); }
+      if (event.key === "Tab") {
+        const items = sidebar.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]');
+        const first = items?.[0], last = items?.[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    }}><button className="sidebar__close" onClick={closeMenu} aria-label="Close navigation"><X size={24}/></button><Brand compact/><nav className="sidebar__nav">{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={!selectionPage && tab === id ? "active" : ""} onClick={() => { closeMenu(); if(selectionPage) router.push("/staff"); else setTab(id); }}><Icon size={17}/><span>{label}</span></button>)}{current.role === "admin" && <Link className={selectionPage ? "active" : ""} href="/staff/selection" aria-label="Selection by sport" title="Selection by sport" aria-current={selectionPage ? "page" : undefined} onClick={closeMenu}><ListFilter size={17}/><span>Selection by sport</span></Link>}</nav>
       <div className="sidebar__bottom"><div className="sidebar__user"><span className="sidebar__avatar">{initials(current.name)}</span><div><strong>{current.name}</strong><span>{current.role}</span></div><button title="Sign out" onClick={() => void signOut()}><LogOut size={15}/></button></div></div>
     </aside>
-    <section className="staff-main">
-      <header className="staff-topbar"><div><h1>{title}</h1><p>Freshy Game 2026 · Brown Team Human Resource</p></div><div className="staff-topbar__actions"><Link className="button button--soft" href="/staff/upload"><Smartphone size={15}/><span>Booth mode</span></Link><button className="icon-button" title="Notifications"><Bell size={17}/></button>{tab === "participants" && current.role !== "viewer" && <button className="button button--soft" onClick={() => setCreating(true)}>Create participant</button>}{tab === "participants" && <button className="button button--primary" onClick={() => setTab("import")}><FolderUp size={15}/><span>Import CSV</span></button>}</div></header>
+    <section className="staff-main" inert={menuOpen}>
+      <header className="staff-topbar"><div className="staff-topbar__heading"><button ref={menuButton} className="icon-button staff-menu-toggle" aria-label="Open navigation" aria-controls="staff-sidebar" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={22}/></button><div><h1>{title}</h1><p>Freshy Game 2026 · Brown Team Human Resource</p></div></div><div className="staff-topbar__actions"><Link className="button button--soft" href="/staff/upload"><Smartphone size={15}/><span>Booth mode</span></Link><button className="icon-button" title="Notifications"><Bell size={17}/></button>{!selectionPage && tab === "participants" && current.role !== "viewer" && <button className="button button--soft" onClick={() => setCreating(true)}>Create participant</button>}{!selectionPage && tab === "participants" && <button className="button button--primary" onClick={() => setTab("import")}><FolderUp size={15}/><span>Import CSV</span></button>}</div></header>
       {workspaceError && <div role="alert" className="notice notice--error">{workspaceError}</div>}
       {current.canBootstrap && <div className="notice notice--info" style={{marginBottom:16}}>No administrator exists yet. <button className="button button--soft" style={{marginLeft:8,minHeight:30}} onClick={() => { setWorkspaceError(""); void bootstrap().catch(error => setWorkspaceError(errorMessage(error, "Set up administrator access"))); }}>Make me the first admin</button></div>}
-      {tab === "participants" && <ParticipantDashboard stats={stats} selectedId={selectedId} setSelectedId={setSelectedId} canEdit={current.role !== "viewer"} isAdmin={current.role === "admin"}/>}
+      {!selectionPage && tab === "participants" && <ParticipantDashboard stats={stats} selectedId={selectedId} setSelectedId={setSelectedId} canEdit={current.role !== "viewer"}/>}
+      {selectionPage && (current.role === "admin" ? <ParticipantSelection /> : <div className="notice notice--error">Only administrators can manage participant selection.</div>)}
       {creating && current.role !== "viewer" && <CreateParticipantDrawer onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setSelectedId(id); }} />}
       {tab === "import" && <ImportPanel />}
       {tab === "staff" && current.role === "admin" && <StaffPanel />}
@@ -100,7 +129,7 @@ function StaffWorkspace() {
   </main>;
 }
 
-function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit, isAdmin }: { stats: { total:number;complete:number;pending:number;sports:number } | undefined; selectedId: Id<"participants"> | null; setSelectedId:(id:Id<"participants">|null)=>void; canEdit:boolean; isAdmin:boolean }) {
+function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { stats: { total:number;complete:number;pending:number;sports:number } | undefined; selectedId: Id<"participants"> | null; setSelectedId:(id:Id<"participants">|null)=>void; canEdit:boolean }) {
   const { results, status, loadMore } = usePaginatedQuery(api.participants.list, {}, { initialNumItems: 50 });
   const convex = useConvex();
   const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all"); const [faculty, setFaculty] = useState(""); const [sport, setSport] = useState(""); const [filterOpen,setFilterOpen]=useState(false); const [autoLoadingFilters,setAutoLoadingFilters]=useState(false); const [draftFilter,setDraftFilter]=useState("all"); const [draftFaculty,setDraftFaculty]=useState(""); const [draftSport,setDraftSport]=useState(""); const [exporting,setExporting]=useState(false); const [selectedIds,setSelectedIds]=useState<Set<Id<"participants">>>(new Set()); const [exportError,setExportError]=useState("");
@@ -125,7 +154,6 @@ function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit, isAdm
     <div className="stats-grid">
       <Stat label="All participants" value={stats?.total} icon={UsersRound}/><Stat label="Verified" value={stats?.complete} icon={BadgeCheck}/><Stat label="Awaiting review" value={stats?.pending} icon={Activity}/><Stat label="Activities" value={stats?.sports} icon={CircleGauge}/>
     </div>
-    {isAdmin && <ParticipantSelection onOpen={() => setSelectedId(null)}/>}
     <section className="panel"><div className="panel__head"><h2>Participant records</h2><div className="filters"><div className="search-wrap"><Search size={14}/><input className="input input--search" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name or student ID"/></div><button className="button button--soft filter-trigger" aria-haspopup="dialog" aria-expanded={filterOpen} onClick={openFilters}><ListFilter size={15}/> Filters{activeFilterCount>0&&<span className="filter-count">{activeFilterCount}</span>}</button>{sport&&<button className="button button--soft" disabled={exporting} onClick={()=>void exportSelectedSport()}>{exporting?<span className="spinner" style={{color:"#4b2f25"}}/>:<Download size={14}/>} Sport PDF</button>}{selectedIds.size>0&&<button className="button button--primary" disabled={exporting} onClick={()=>void exportBulk()}>{exporting?<span className="spinner"/>:<Download size={14}/>} Bulk PDF ({selectedIds.size})</button>}{selectedIds.size>0&&<button className="icon-button" title="Clear selection" onClick={()=>setSelectedIds(new Set())}><X size={14}/></button>}</div></div>
       {exportError&&<div className="notice notice--error bulk-export-notice">{exportError}</div>}
       <div style={{overflowX:"auto"}}><table className="data-table"><thead><tr><th className="selection-cell"><input type="checkbox" aria-label="Select all filtered participants" checked={allVisibleSelected} onChange={toggleVisible}/></th><th>Participant</th><th>Student ID</th><th>Role</th><th>Faculty</th><th>Sport / Performance</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>{visible.map((p) => <tr key={p._id} onClick={() => setSelectedId(p._id)}><td className="selection-cell" onClick={event=>event.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.fullNameEnglish}`} checked={selectedIds.has(p._id)} onChange={()=>toggleParticipant(p._id)}/></td><td><div className="person-cell">{p.photoUrl ? <img className="person-cell__avatar" src={p.photoUrl} alt=""/> : <span className="person-cell__avatar">{initials(p.fullNameEnglish)}</span>}<div><strong>{p.fullNameThai}</strong><span>{p.fullNameEnglish}</span></div></div></td><td>{p.studentId}</td><td><span className={`pill ${p.participantKind === "performer" ? "pill--cream" : "pill--gray"}`}>{kindLabel[participantKind(p)]}</span></td><td>{p.faculty}</td><td>{p.sport}</td><td>{p.category || "—"}</td><td><span className={`pill ${statusClass[p.status]}`}>{statusLabel[p.status]}</span></td><td><ChevronRight size={14}/></td></tr>)}{!visible.length && <tr><td colSpan={9} className="empty-state">No matching participants</td></tr>}</tbody></table></div>
