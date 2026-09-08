@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
 
 function normalizePhone(value: string) {
@@ -74,10 +74,10 @@ export const registerPerformer = mutation({
   handler: async (ctx, args) => {
     const audit = await ctx.db.get("auditEvents", args.auditEventId);
     if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) {
-      throw new Error("Registration session expired. Please refresh and try again");
+      throw new ConvexError("Registration session expired. Please refresh and try again");
     }
     if (audit.action !== "performer_registration_visit" || audit.successful) {
-      throw new Error("This registration session cannot be used");
+      throw new ConvexError("This registration session cannot be used");
     }
 
     const studentId = args.studentId.trim();
@@ -86,10 +86,10 @@ export const registerPerformer = mutation({
     const faculty = args.faculty.trim();
     const phone = normalizePhone(args.phone);
     const email = args.email.trim().toLowerCase();
-    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
-    if (!fullNameThai || !fullNameEnglish || !faculty) throw new Error("Please complete all required personal information");
-    if (!phone) throw new Error("Please enter a valid 10-digit Thai phone number");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Please enter a valid email address");
+    if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
+    if (!fullNameThai || !fullNameEnglish || !faculty) throw new ConvexError("Please complete all required personal information");
+    if (!phone) throw new ConvexError("Please enter a valid 10-digit Thai phone number");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
 
     const existing = await ctx.db
       .query("participants")
@@ -123,7 +123,7 @@ export const registerPerformer = mutation({
         existing.status === "incomplete" &&
         normalizePhone(existing.phone ?? "") === phone;
       if (!isResumable) {
-        throw new Error("This Student ID is already registered. Please contact staff if you need to update your record");
+        throw new ConvexError("This Student ID is already registered. Please contact staff if you need to update your record");
       }
       await ctx.db.patch("participants", existing._id, registrationData);
       participantId = existing._id;
@@ -164,13 +164,13 @@ export const verifyIdentity = mutation({
   returns: v.object({ sessionId: v.id("uploadSessions"), name: v.string(), sport: v.string(), faculty: v.string() }),
   handler: async (ctx, args) => {
     const audit = await ctx.db.get("auditEvents", args.auditEventId);
-    if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) throw new Error("Verification session expired");
-    if (audit.attempts >= 5) throw new Error("Too many attempts. Please contact staff");
+    if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) throw new ConvexError("Verification session expired");
+    if (audit.attempts >= 5) throw new ConvexError("Too many attempts. Please contact staff");
     await ctx.db.patch("auditEvents", audit._id, { attempts: audit.attempts + 1 });
 
     const studentId = args.studentId.trim();
     if (!/^\d{10}$/.test(studentId)) {
-      throw new Error("Student ID must contain exactly 10 digits");
+      throw new ConvexError("Student ID must contain exactly 10 digits");
     }
     const participant = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
     const submittedPhone = normalizePhone(args.phone);
@@ -179,7 +179,7 @@ export const verifyIdentity = mutation({
       registeredPhone !== null &&
       registeredPhone === submittedPhone;
     if (!participant || !matches || submittedPhone === null) {
-      throw new Error("The information does not match our registration record");
+      throw new ConvexError("The information does not match our registration record");
     }
     await ctx.db.patch("auditEvents", audit._id, { participantId: participant._id, successful: true });
     const sessionId = await ctx.db.insert("uploadSessions", {
@@ -197,7 +197,7 @@ export const generateUploadUrl = mutation({
   returns: v.string(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get("uploadSessions", args.sessionId);
-    if (!session || session.used || session.expiresAt < Date.now()) throw new Error("Upload session expired");
+    if (!session || session.used || session.expiresAt < Date.now()) throw new ConvexError("Upload session expired");
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -207,9 +207,9 @@ export const completeUpload = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get("uploadSessions", args.sessionId);
-    if (!session || session.used || session.expiresAt < Date.now()) throw new Error("Upload session expired");
+    if (!session || session.used || session.expiresAt < Date.now()) throw new ConvexError("Upload session expired");
     const participant = await ctx.db.get("participants", session.participantId);
-    if (!participant) throw new Error("Participant not found");
+    if (!participant) throw new ConvexError("Participant not found");
     await ctx.db.patch("participants", participant._id, {
       profilePhotoId: args.profilePhotoId,
       nationalIdImageId: args.nationalIdImageId,

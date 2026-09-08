@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { env } from "./_generated/server";
@@ -7,7 +8,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     Password({
       profile(params) {
         const email = String(params.email ?? "").trim().toLowerCase();
-        if (!email) throw new Error("Email is required");
+        if (!email) throw new ConvexError("Email is required");
 
         const name = String(params.name ?? "").trim();
         if (params.flow !== "signUp") {
@@ -16,12 +17,12 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
         const inviteCode = String(params.inviteCode ?? "");
 
-        if (!name) throw new Error("Name is required");
+        if (!name) throw new ConvexError("Name is required");
         if (!env.STAFF_INVITE_CODE) {
-          throw new Error("Staff registration has not been configured");
+          throw new ConvexError("Staff registration has not been configured");
         }
         if (inviteCode !== env.STAFF_INVITE_CODE) {
-          throw new Error("Invalid staff invitation code");
+          throw new ConvexError("Invalid staff invitation code");
         }
 
         return { email, name, role: "registrar" as const, active: true };
@@ -33,7 +34,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           !/[a-z]/.test(password) ||
           !/[0-9]/.test(password)
         ) {
-          throw new Error(
+          throw new ConvexError(
             "Password must be at least 10 characters and include upper-case, lower-case, and a number",
           );
         }

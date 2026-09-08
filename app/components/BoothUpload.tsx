@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { errorMessage, UserFacingError } from "../lib/errors";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -69,7 +70,7 @@ function BoothSignIn() {
     try {
       await signIn("password", data);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to sign in");
+      setError(errorMessage(caught, "Sign in"));
       setBusy(false);
     }
   }
@@ -179,7 +180,7 @@ function BoothWorkspace() {
         const compressed = await compressImage(file, kind);
         const url = await generateUploadUrl();
         const response = await fetch(url, { method: "POST", headers: { "Content-Type": compressed.type }, body: compressed });
-        if (!response.ok) throw new Error("One of the images could not be uploaded. Please try again.");
+        if (!response.ok) throw new UserFacingError("One of the images could not be uploaded. Please try again.");
         return (await response.json()).storageId as Id<"_storage">;
       };
       const profilePhotoId = await uploadOne("profile", files.profile);
@@ -189,7 +190,7 @@ function BoothWorkspace() {
       clearFiles();
       setComplete(true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Upload failed. Please try again.");
+      setError(errorMessage(caught, "Upload images"));
     } finally {
       setBusy(false);
     }

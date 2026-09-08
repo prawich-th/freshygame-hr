@@ -1,3 +1,4 @@
+import { UserFacingError } from "./errors";
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 const MAX_DIMENSION = 1600;
 const INITIAL_JPEG_QUALITY = 0.72;
@@ -104,10 +105,10 @@ function drawWatermark(context: CanvasRenderingContext2D, width: number, height:
 
 export async function compressImage(file: File, kind: UploadImageKind) {
   if (!file.type.startsWith("image/")) {
-    throw new Error("Please choose a JPG, PNG, or WebP image");
+    throw new UserFacingError("Please choose a JPG, PNG, or WebP image");
   }
   if (file.size > MAX_SOURCE_BYTES) {
-    throw new Error("Please choose an image smaller than 25 MB");
+    throw new UserFacingError("Please choose an image smaller than 25 MB");
   }
 
   let bitmap: ImageBitmap;
@@ -118,7 +119,7 @@ export async function compressImage(file: File, kind: UploadImageKind) {
       readExifOrientation(file),
     ]);
   } catch {
-    throw new Error("This image could not be processed. Please use JPG, PNG, or WebP");
+    throw new UserFacingError("This image could not be processed. Please use JPG, PNG, or WebP");
   }
 
   try {
@@ -132,7 +133,7 @@ export async function compressImage(file: File, kind: UploadImageKind) {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("Image compression is unavailable in this browser");
+    if (!context) throw new UserFacingError("Image compression is unavailable in this browser");
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
@@ -147,7 +148,7 @@ export async function compressImage(file: File, kind: UploadImageKind) {
     }
 
     const encode = (quality: number) => new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Image compression failed")), "image/jpeg", quality);
+      canvas.toBlob((result) => result ? resolve(result) : reject(new UserFacingError("Image compression failed")), "image/jpeg", quality);
     });
     let quality = INITIAL_JPEG_QUALITY;
     let blob = await encode(quality);

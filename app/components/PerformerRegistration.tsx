@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { errorMessage, UserFacingError } from "../lib/errors";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
@@ -66,8 +67,8 @@ export function PerformerRegistration() {
     setError("");
     const data = new FormData(event.currentTarget);
     try {
-      if (!auditId) throw new Error("Secure session is still loading");
-      if (data.get("pdpaConsent") !== "yes") throw new Error("PDPA consent is required to register");
+      if (!auditId) throw new UserFacingError("Secure session is still loading");
+      if (data.get("pdpaConsent") !== "yes") throw new UserFacingError("PDPA consent is required to register");
       const result = await registerPerformer({
         auditEventId: auditId,
         performerType: String(data.get("performerType")) as PerformerType,
@@ -89,7 +90,7 @@ export function PerformerRegistration() {
       setStep(2);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Registration failed");
+      setError(errorMessage(caught, "Register"));
     } finally {
       setBusy(false);
     }
@@ -124,7 +125,7 @@ export function PerformerRegistration() {
           headers: { "Content-Type": compressed.type },
           body: compressed,
         });
-        if (!response.ok) throw new Error("Image upload failed");
+        if (!response.ok) throw new UserFacingError("Image upload failed");
         return (await response.json()).storageId as Id<"_storage">;
       };
       const profilePhotoId = await uploadImage(files.profile, "profile");
@@ -139,7 +140,7 @@ export function PerformerRegistration() {
       setStep(3);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Upload failed");
+      setError(errorMessage(caught, "Upload images"));
     } finally {
       setBusy(false);
     }

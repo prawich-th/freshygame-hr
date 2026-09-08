@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { errorMessage, UserFacingError } from "../lib/errors";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -37,14 +38,14 @@ export function SelfUpload() {
     event.preventDefault(); setBusy(true); setError("");
     const data = new FormData(event.currentTarget);
     try {
-      if (!auditId) throw new Error("Secure session is still loading");
+      if (!auditId) throw new UserFacingError("Secure session is still loading");
       const result = await verifyIdentity({
         studentId: String(data.get("studentId")),
         phone: String(data.get("phone")),
         auditEventId: auditId,
       });
       setVerified(result); setStep(2);
-    } catch (e) { setError(e instanceof Error ? e.message : "Verification failed"); }
+    } catch (e) { setError(errorMessage(e, "Verify your details")); }
     finally { setBusy(false); }
   }
 
@@ -68,7 +69,7 @@ export function SelfUpload() {
         const compressed = await compressImage(file, kind);
         const uploadUrl = await generateUploadUrl({ sessionId: verified.sessionId });
         const response = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": compressed.type }, body: compressed });
-        if (!response.ok) throw new Error("Image upload failed");
+        if (!response.ok) throw new UserFacingError("Image upload failed");
         return (await response.json()).storageId as Id<"_storage">;
       };
       const profilePhotoId = await uploadImage(files.profile, "profile");
@@ -76,7 +77,7 @@ export function SelfUpload() {
       const studentIdImageId = await uploadImage(files.studentId, "studentId");
       await completeUpload({ sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
       setStep(3);
-    } catch (e) { setError(e instanceof Error ? e.message : "Upload failed"); }
+    } catch (e) { setError(errorMessage(e, "Upload images")); }
     finally { setBusy(false); }
   }
 

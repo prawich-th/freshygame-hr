@@ -1,5 +1,5 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireEditor, requireStaff } from "./access";
 import schema from "./schema";
@@ -49,7 +49,7 @@ function normalizePhone(value: string | undefined, studentId: string) {
     phone = `0${phone}`;
   }
   if (!/^0\d{9}$/.test(phone)) {
-    throw new Error(`Phone number for Student ID ${studentId} could not be cleaned to a valid 10-digit Thai number`);
+    throw new ConvexError(`Phone number for Student ID ${studentId} could not be cleaned to a valid 10-digit Thai number`);
   }
   return phone;
 }
@@ -120,7 +120,7 @@ export const bootstrapAdmin = mutation({
   handler: async (ctx) => {
     const staff = await requireStaff(ctx);
     const admin = await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", "admin")).first();
-    if (admin) throw new Error("An administrator already exists");
+    if (admin) throw new ConvexError("An administrator already exists");
     await ctx.db.patch("users", staff.userId, { role: "admin" });
     return null;
   },
@@ -261,7 +261,7 @@ export const exportSelected = query({
   handler: async (ctx, args) => {
     const staff = await requireStaff(ctx);
     if (args.participantIds.length === 0) return [];
-    if (args.participantIds.length > 50) throw new Error("Export at most 50 participants per PDF");
+    if (args.participantIds.length > 50) throw new ConvexError("Export at most 50 participants per PDF");
 
     const entries = [];
     for (const participantId of args.participantIds) {
@@ -289,20 +289,20 @@ export const createParticipant = mutation({
     const fullNameThai = row.fullNameThai.trim();
     const fullNameEnglish = row.fullNameEnglish.trim();
     const faculty = row.faculty.trim();
-    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
-    if (!fullNameThai || !fullNameEnglish) throw new Error("Thai and English names are required");
-    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new Error("Choose a supported faculty");
+    if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
+    if (!fullNameThai || !fullNameEnglish) throw new ConvexError("Thai and English names are required");
+    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
     const participantKind = resolveKind(row);
-    if (participantKind === "performer" && !row.performerType) throw new Error("Choose a performer team");
+    if (participantKind === "performer" && !row.performerType) throw new ConvexError("Choose a performer team");
     const sportDefinition = findSport(row.sport);
     const category = row.category?.trim();
-    if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new Error("Choose Camera or Support team");
-    if (participantKind === "athlete" && (!sportDefinition || !category || !sportDefinition.types.includes(category))) throw new Error("Choose a sport and event type");
+    if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new ConvexError("Choose Camera or Support team");
+    if (participantKind === "athlete" && (!sportDefinition || !category || !sportDefinition.types.includes(category))) throw new ConvexError("Choose a sport and event type");
     const duplicate = await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).unique();
-    if (duplicate) throw new Error("A participant already uses this Student ID. Open the existing record to edit it.");
+    if (duplicate) throw new ConvexError("A participant already uses this Student ID. Open the existing record to edit it.");
     const phone = normalizePhone(row.phone, studentId);
     const email = row.email?.trim().toLowerCase() || undefined;
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Please enter a valid email address");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
     const last = await ctx.db.query("participants").withIndex("by_orderNumber").order("desc").first();
     const now = Date.now();
     const participantId = await ctx.db.insert("participants", {
@@ -322,7 +322,7 @@ export const importBatch = mutation({
   returns: v.object({ created: v.number(), updated: v.number() }),
   handler: async (ctx, args) => {
     const staff = await requireEditor(ctx);
-    if (args.participants.length > 100) throw new Error("Import at most 100 rows per batch");
+    if (args.participants.length > 100) throw new ConvexError("Import at most 100 rows per batch");
     const lastOrderedParticipant = await ctx.db.query("participants").withIndex("by_orderNumber").order("desc").first();
     let nextOrderNumber = (lastOrderedParticipant?.orderNumber ?? 0) + 1;
     let created = 0;
@@ -331,7 +331,7 @@ export const importBatch = mutation({
       const studentId = row.studentId.trim();
       if (!studentId || !row.fullNameEnglish.trim()) continue;
       if (!/^\d{10}$/.test(studentId)) {
-        throw new Error(`Student ID ${studentId} must contain exactly 10 digits`);
+        throw new ConvexError(`Student ID ${studentId} must contain exactly 10 digits`);
       }
       const faculty = row.faculty.trim();
       if (![
@@ -339,9 +339,9 @@ export const importBatch = mutation({
         "คณะศิลปศาสตร์",
         "คณะแพทยศาสตร์นานาชาติจุฬาภรณ์",
       ].includes(faculty)) {
-        throw new Error(`Student ID ${studentId} has an unsupported faculty`);
+        throw new ConvexError(`Student ID ${studentId} has an unsupported faculty`);
       }
-      if (resolveKind(row) === "support" && !SUPPORT_TYPES.includes(row.category?.trim() ?? "")) throw new Error(`Student ID ${studentId}: Choose Camera or Support team`);
+      if (resolveKind(row) === "support" && !SUPPORT_TYPES.includes(row.category?.trim() ?? "")) throw new ConvexError(`Student ID ${studentId}: Choose Camera or Support team`);
       const existing = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
@@ -382,7 +382,7 @@ export const updateStatus = mutation({
   handler: async (ctx, args) => {
     const staff = await requireEditor(ctx);
     const participant = await ctx.db.get("participants", args.participantId);
-    if (!participant) throw new Error("Participant not found");
+    if (!participant) throw new ConvexError("Participant not found");
     await ctx.db.patch("participants", args.participantId, {
       status: args.status,
       updatedAt: Date.now(),
@@ -435,35 +435,35 @@ export const updateParticipant = mutation({
   handler: async (ctx, args) => {
     const staff = await requireEditor(ctx);
     const participant = await ctx.db.get("participants", args.participantId);
-    if (!participant) throw new Error("Participant not found");
+    if (!participant) throw new ConvexError("Participant not found");
 
     const studentId = args.studentId.trim();
     const fullNameThai = args.fullNameThai.trim();
     const fullNameEnglish = args.fullNameEnglish.trim();
     const faculty = args.faculty.trim();
     const sport = normalizeSport(args.sport);
-    if (!/^\d{10}$/.test(studentId)) throw new Error("Student ID must contain exactly 10 digits");
+    if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish || !faculty || !sport) {
-      throw new Error("Student ID, names, faculty, and activity are required");
+      throw new ConvexError("Student ID, names, faculty, and activity are required");
     }
     if (args.participantKind === "performer" && !args.performerType) {
-      throw new Error("Choose a performer team");
+      throw new ConvexError("Choose a performer team");
     }
 
-    if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new Error("Choose Camera or Support team");
+    if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new ConvexError("Choose Camera or Support team");
 
     if (studentId !== participant.studentId) {
       const duplicate = await ctx.db
         .query("participants")
         .withIndex("by_studentId", (q) => q.eq("studentId", studentId))
         .unique();
-      if (duplicate) throw new Error("Another participant already uses this Student ID");
+      if (duplicate) throw new ConvexError("Another participant already uses this Student ID");
     }
 
     const phone = normalizePhone(args.phone, studentId);
     const email = args.email?.trim().toLowerCase() || undefined;
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new Error("Please enter a valid email address");
+      throw new ConvexError("Please enter a valid email address");
     }
 
     await ctx.db.patch("participants", participant._id, {
@@ -522,9 +522,9 @@ export const completeStaffUpload = mutation({
   handler: async (ctx, args) => {
     const staff = await requireEditor(ctx);
     const participant = await ctx.db.get("participants", args.participantId);
-    if (!participant) throw new Error("Participant not found");
+    if (!participant) throw new ConvexError("Participant not found");
     if (!args.profilePhotoId && !args.nationalIdImageId && !args.studentIdImageId) {
-      throw new Error("Choose at least one image to upload");
+      throw new ConvexError("Choose at least one image to upload");
     }
     const hasCompleteDocumentSet = Boolean(
       (args.profilePhotoId || participant.profilePhotoId) &&
@@ -572,13 +572,13 @@ export const updateStaffRole = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const staff = await requireAdmin(ctx);
-    if (staff.userId === args.userId && !args.active) throw new Error("You cannot deactivate your own account");
+    if (staff.userId === args.userId && !args.active) throw new ConvexError("You cannot deactivate your own account");
     const target = await ctx.db.get("users", args.userId);
-    if (!target?.role) throw new Error("Staff member not found");
+    if (!target?.role) throw new ConvexError("Staff member not found");
     if (target.role === "admin" && (args.role !== "admin" || !args.active)) {
       const admins = await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", "admin")).take(100);
       if (!admins.some((admin) => admin._id !== args.userId && admin.active !== false)) {
-        throw new Error("Assign another active administrator first");
+        throw new ConvexError("Assign another active administrator first");
       }
     }
     await ctx.db.patch("users", args.userId, { role: args.role, active: args.active });
