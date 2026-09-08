@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { normalizeSport } from "../shared/sports";
 import { mutation } from "./_generated/server";
 
 function normalizePhone(value: string) {
@@ -93,7 +94,7 @@ export const registerPerformer = mutation({
 
     const existing = await ctx.db
       .query("participants")
-      .withIndex("by_studentId", (q) => q.eq("studentId", studentId))
+      .withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", args.performerType))
       .unique();
     const registrationData = {
       participantKind: "performer",
@@ -157,6 +158,7 @@ export const registerPerformer = mutation({
 
 export const verifyIdentity = mutation({
   args: {
+    sport: v.optional(v.string()),
     studentId: v.string(),
     phone: v.string(),
     auditEventId: v.id("auditEvents"),
@@ -172,7 +174,11 @@ export const verifyIdentity = mutation({
     if (!/^\d{10}$/.test(studentId)) {
       throw new ConvexError("Student ID must contain exactly 10 digits");
     }
-    const participant = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
+    const registrations = args.sport?.trim()
+      ? await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", normalizeSport(args.sport!))).take(2)
+      : await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).take(2);
+    if (registrations.length > 1) throw new ConvexError("Choose the sport or activity you want to upload documents for");
+    const participant = registrations[0];
     const submittedPhone = normalizePhone(args.phone);
     const registeredPhone = normalizePhone(participant?.phone ?? "");
     const matches = participant &&

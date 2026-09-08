@@ -299,8 +299,9 @@ export const createParticipant = mutation({
     const category = row.category?.trim();
     if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new ConvexError("Choose Camera or Support team");
     if (participantKind === "athlete" && (!sportDefinition || !category || !sportDefinition.types.includes(category))) throw new ConvexError("Choose a sport and event type");
-    const duplicate = await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).unique();
-    if (duplicate) throw new ConvexError("A participant already uses this Student ID. Open the existing record to edit it.");
+    const activity = participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name;
+    const duplicate = await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", activity)).unique();
+    if (duplicate) throw new ConvexError("This Student ID is already registered for this sport or activity. Open that registration to edit it.");
     const phone = normalizePhone(row.phone, studentId);
     const email = row.email?.trim().toLowerCase() || undefined;
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
@@ -343,7 +344,8 @@ export const importBatch = mutation({
         throw new ConvexError(`Student ID ${studentId} has an unsupported faculty`);
       }
       if (resolveKind(row) === "support" && !SUPPORT_TYPES.includes(row.category?.trim() ?? "")) throw new ConvexError(`Student ID ${studentId}: Choose Camera or Support team`);
-      const existing = await ctx.db.query("participants").withIndex("by_studentId", (q) => q.eq("studentId", studentId)).unique();
+      const activity = resolveKind(row) === "support" ? "Support team" : row.performerType ?? normalizeSport(row.sport);
+      const existing = await ctx.db.query("participants").withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", activity)).unique();
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
       const email = rawEmail?.trim().toLowerCase() || undefined;
@@ -356,7 +358,7 @@ export const importBatch = mutation({
         studentId,
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
-        status: existing?.nationalIdImageId && existing?.studentIdImageId && existing?.profilePhotoId ? "pending" as const : "incomplete" as const,
+        status: existing?.status ?? "incomplete" as const,
         source: "import" as const,
         updatedAt: Date.now(),
         updatedBy: staff.userId,
@@ -453,12 +455,12 @@ export const updateParticipant = mutation({
 
     if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new ConvexError("Choose Camera or Support team");
 
-    if (studentId !== participant.studentId) {
-      const duplicate = await ctx.db
-        .query("participants")
-        .withIndex("by_studentId", (q) => q.eq("studentId", studentId))
-        .unique();
-      if (duplicate) throw new ConvexError("Another participant already uses this Student ID");
+    const activity = args.participantKind === "support" ? "Support team" : args.participantKind === "performer" ? args.performerType! : sport;
+    const duplicate = await ctx.db.query("participants")
+      .withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", activity))
+      .unique();
+    if (duplicate && duplicate._id !== participant._id) {
+      throw new ConvexError("This Student ID is already registered for this sport or activity");
     }
 
     const phone = normalizePhone(args.phone, studentId);

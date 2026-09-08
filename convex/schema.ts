@@ -132,6 +132,7 @@ export default defineSchema({
     .index("by_nationalIdImageId", ["nationalIdImageId"])
     .index("by_studentIdImageId", ["studentIdImageId"])
     .index("by_studentId", ["studentId"])
+    .index("by_studentId_and_sport", ["studentId", "sport"])
     .index("by_orderNumber", ["orderNumber"])
     .index("by_status", ["status"])
     .index("by_sport", ["sport"])

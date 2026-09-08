@@ -8,6 +8,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Check, LockKeyhole, ShieldCheck, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { SPORTS } from "@/shared/sports";
 import { Brand } from "./Brand";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
@@ -43,6 +44,7 @@ export function SelfUpload() {
         studentId: String(data.get("studentId")),
         phone: String(data.get("phone")),
         auditEventId: auditId,
+        sport: String(data.get("sport") ?? "") || undefined,
       });
       setVerified(result); setStep(2);
     } catch (e) { setError(errorMessage(e, "Verify your details")); }
@@ -100,6 +102,7 @@ export function SelfUpload() {
             <form onSubmit={handleVerify}>
               <div className="field"><label>หมายเลขประจำตัวนักศึกษา / Student ID <span>*</span></label><input className="input" name="studentId" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="เช่น 6909680123" /></div>
               <div className="field"><label>หมายเลขโทรศัพท์ที่ลงทะเบียน / Registered phone number <span>*</span></label><input className="input" name="phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="081-234-5678 or +66 81 234 5678" /></div>
+              <div className="field"><label htmlFor="upload-sport">กีฬา / Sport or activity</label><select id="upload-sport" className="select" name="sport"><option value="">Choose if registered for multiple activities</option>{SPORTS.map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}{["Katakorn", "Cheerleader", "Parade", "Support team"].map(s => <option key={s}>{s}</option>)}</select><small>Documents are uploaded for the chosen registration.</small></div>
               <div className="notice notice--info"><LockKeyhole size={13} style={{verticalAlign:"middle",marginRight:6}}/>IP address and browser details are recorded to protect your personal data.</div>
               {error && <div className="notice notice--error">{error}</div>}
               <button className="button button--primary button--large" disabled={busy || !auditId}>{busy ? <span className="spinner" /> : <>ตรวจสอบข้อมูล <ArrowRight size={17}/></>}</button>

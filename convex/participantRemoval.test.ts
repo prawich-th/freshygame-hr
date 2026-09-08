@@ -81,7 +81,7 @@ test("a paused job resumes without removing retained participants", async () => 
 test("sport review excludes other sports and forged cross-sport selections are rejected", async () => {
   vi.useFakeTimers();
   const {t, ids, admin} = await setup();
-  const other = await t.run(ctx => ctx.db.insert("participants", {...row("6909680999"), sport:"Swimming"}));
+  const other = await t.run(ctx => ctx.db.insert("participants", {...row("6909680002"), sport:"Swimming"}));
   const candidates = await admin.query(api.participants.removalCandidates, {sport:"Volleyball"});
   expect(candidates.map(p => p.id).sort()).toEqual([ids.keep,ids.remove].sort());
   await expect(admin.mutation(api.participants.keepOnlySelected, {sport:"Volleyball", keepIds:[other], reviewedIds:[ids.keep,ids.remove], confirmation:"REMOVE OTHERS"})).rejects.toThrow("list changed");
