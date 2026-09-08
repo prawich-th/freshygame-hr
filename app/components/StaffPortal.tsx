@@ -19,14 +19,14 @@ import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
 import { ContactDirectory } from "./ContactDirectory";
 
-type Tab = "directory" | "participants" | "import" | "staff" | "audit";
+type Tab = "participants" | "import" | "staff" | "audit";
 const statusLabel = { incomplete: "Incomplete", pending: "Pending review", verified: "Verified", rejected: "Needs correction" };
 const statusClass = { incomplete: "pill--gray", pending: "pill--amber", verified: "pill--green", rejected: "pill--red" };
 
-export function StaffPortal({selectionPage = false}: {selectionPage?: boolean}) {
+export function StaffPortal({selectionPage = false, directoryPage = false}: {selectionPage?: boolean; directoryPage?: boolean}) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   if (isLoading) return <div className="auth-page"><span className="spinner" style={{color:"#4b2f25"}} /></div>;
-  return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} /> : <StaffAuth />;
+  return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} directoryPage={directoryPage} /> : <StaffAuth />;
 }
 
 function StaffAuth() {
@@ -58,7 +58,13 @@ function StaffAuth() {
   </section></div></main>;
 }
 
-function StaffWorkspace({selectionPage}: {selectionPage: boolean}) {
+function DirectoryRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace("/staff/directory"); }, [router]);
+  return <div className="auth-page" role="status">Opening contact directory…</div>;
+}
+
+function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean; directoryPage: boolean}) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -79,7 +85,7 @@ function StaffWorkspace({selectionPage}: {selectionPage: boolean}) {
   }, [menuOpen]);
   const { signOut } = useAuthActions();
   const current = useQuery(api.participants.currentStaff);
-  const stats = useQuery(api.participants.stats, current && current.role !== "co-sport" ? {} : "skip");
+  const stats = useQuery(api.participants.stats, !directoryPage && current && current.role !== "co-sport" ? {} : "skip");
   const bootstrap = useMutation(api.participants.bootstrapAdmin);
   const [workspaceError, setWorkspaceError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -89,10 +95,10 @@ function StaffWorkspace({selectionPage}: {selectionPage: boolean}) {
   if (current === undefined) return <div className="auth-page"><span className="spinner" style={{color:"#4b2f25"}} /></div>;
   if (current === null) return <div className="auth-page"><section className="auth-card"><h1>Access unavailable</h1><p>Your staff account is not active. Contact an administrator.</p><button className="button button--primary" onClick={() => void signOut()}>Sign out</button></section></div>;
 
-  if (current.role === "co-sport" || tab === "directory") return <main className="directory-shell"><header className="directory-header"><Brand compact/><div>{current.role === "co-sport" ? <span>Co-sport</span> : <button className="button button--soft" onClick={() => setTab("participants")}>Back</button>}<button className="button button--soft" onClick={() => void signOut()}>Sign out</button></div></header><ContactDirectory /></main>;
+  if (current.role === "co-sport" && !directoryPage) return <DirectoryRedirect />;
+  if (directoryPage) return <main className="directory-shell"><header className="directory-header"><Brand compact/><div>{current.role === "co-sport" ? <span>Co-sport</span> : <Link className="button button--soft" href="/staff">Back to participants</Link>}<button className="button button--soft" onClick={() => void signOut()}>Sign out</button></div></header><ContactDirectory /></main>;
 
   const nav = [
-    { id: "directory" as const, label: "Contact directory", icon: Search },
     { id: "participants" as const, label: "Participants", icon: UsersRound },
     { id: "import" as const, label: "Import data", icon: FolderUp },
     ...(current.role === "admin" ? [
@@ -112,7 +118,7 @@ function StaffWorkspace({selectionPage}: {selectionPage: boolean}) {
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
-    }}><button className="sidebar__close" onClick={closeMenu} aria-label="Close navigation"><X size={24}/></button><Brand compact/><nav className="sidebar__nav">{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={!selectionPage && tab === id ? "active" : ""} onClick={() => { closeMenu(); if(selectionPage) router.push("/staff"); else setTab(id); }}><Icon size={17}/><span>{label}</span></button>)}{current.role === "admin" && <Link className={selectionPage ? "active" : ""} href="/staff/selection" aria-label="Selection by sport" title="Selection by sport" aria-current={selectionPage ? "page" : undefined} onClick={closeMenu}><ListFilter size={17}/><span>Selection by sport</span></Link>}</nav>
+    }}><button className="sidebar__close" onClick={closeMenu} aria-label="Close navigation"><X size={24}/></button><Brand compact/><nav className="sidebar__nav"><Link href="/staff/directory" aria-label="Contact directory" title="Contact directory" onClick={closeMenu}><Search size={17}/><span>Contact directory</span></Link>{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={!selectionPage && tab === id ? "active" : ""} onClick={() => { closeMenu(); if(selectionPage) router.push("/staff"); else setTab(id); }}><Icon size={17}/><span>{label}</span></button>)}{current.role === "admin" && <Link className={selectionPage ? "active" : ""} href="/staff/selection" aria-label="Selection by sport" title="Selection by sport" aria-current={selectionPage ? "page" : undefined} onClick={closeMenu}><ListFilter size={17}/><span>Selection by sport</span></Link>}</nav>
       <div className="sidebar__bottom"><div className="sidebar__user"><span className="sidebar__avatar">{initials(current.name)}</span><div><strong>{current.name}</strong><span>{current.role}</span></div><button title="Sign out" onClick={() => void signOut()}><LogOut size={15}/></button></div></div>
     </aside>
     <section className="staff-main" inert={menuOpen}>
