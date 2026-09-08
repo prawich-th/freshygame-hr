@@ -13,6 +13,7 @@ import type * as auth from "../auth.js";
 import type * as directory from "../directory.js";
 import type * as http from "../http.js";
 import type * as maintenance from "../maintenance.js";
+import type * as participantDocuments from "../participantDocuments.js";
 import type * as participants from "../participants.js";
 import type * as publicIntake from "../publicIntake.js";
 
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   directory: typeof directory;
   http: typeof http;
   maintenance: typeof maintenance;
+  participantDocuments: typeof participantDocuments;
   participants: typeof participants;
   publicIntake: typeof publicIntake;
 }>;

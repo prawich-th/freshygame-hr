@@ -1,3 +1,4 @@
+import { completeDocuments, existingDocuments, linkDocuments } from "./participantDocuments";
 import { internal } from "./_generated/api";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
@@ -307,11 +308,13 @@ export const createParticipant = mutation({
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
     const last = await ctx.db.query("participants").withIndex("by_orderNumber").order("desc").first();
     const now = Date.now();
+    const documents = await existingDocuments(ctx, studentId);
     const participantId = await ctx.db.insert("participants", {
+      ...documents,
       ...row, studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
       performerType: participantKind === "performer" ? row.performerType : undefined,
       sport: participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name,
-      category, phone, email, status: "incomplete", source: "staff",
+      category, phone, email, status: completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
       orderNumber: (last?.orderNumber ?? 0) + 1, updatedAt: now, updatedBy: staff.userId,
     });
     await ctx.db.insert("auditEvents", { action: "staff_participant_created", ipAddress: "authenticated-staff-session", participantId, staffUserId: staff.userId, successful: true, attempts: 1, createdAt: now });
@@ -367,7 +370,8 @@ export const importBatch = mutation({
         await ctx.db.patch("participants", existing._id, data);
         updated += 1;
       } else {
-        await ctx.db.insert("participants", { ...data, orderNumber: nextOrderNumber });
+        const documents = await existingDocuments(ctx, studentId);
+        await ctx.db.insert("participants", { ...data, ...documents, status: completeDocuments(documents) ? "pending" : "incomplete", orderNumber: nextOrderNumber });
         nextOrderNumber += 1;
         created += 1;
       }
@@ -469,7 +473,12 @@ export const updateParticipant = mutation({
       throw new ConvexError("Please enter a valid email address");
     }
 
+    const identityDocuments = studentId !== participant.studentId
+      ? { profilePhotoId: undefined, nationalIdImageId: undefined, studentIdImageId: undefined, ...await existingDocuments(ctx, studentId) }
+      : {};
     await ctx.db.patch("participants", participant._id, {
+      ...identityDocuments,
+      ...(studentId !== participant.studentId ? { status: completeDocuments(identityDocuments) ? "pending" as const : "incomplete" as const } : {}),
       participantKind: args.participantKind,
       performerType: args.participantKind === "performer" ? args.performerType : undefined,
       studentId,
@@ -529,22 +538,11 @@ export const completeStaffUpload = mutation({
     if (!args.profilePhotoId && !args.nationalIdImageId && !args.studentIdImageId) {
       throw new ConvexError("Choose at least one image to upload");
     }
-    const hasCompleteDocumentSet = Boolean(
-      (args.profilePhotoId || participant.profilePhotoId) &&
-      (args.nationalIdImageId || participant.nationalIdImageId) &&
-      (args.studentIdImageId || participant.studentIdImageId),
-    );
-    await ctx.db.patch("participants", args.participantId, {
+    await linkDocuments(ctx, participant, {
       ...(args.profilePhotoId ? { profilePhotoId: args.profilePhotoId } : {}),
       ...(args.nationalIdImageId ? { nationalIdImageId: args.nationalIdImageId } : {}),
       ...(args.studentIdImageId ? { studentIdImageId: args.studentIdImageId } : {}),
-      status: hasCompleteDocumentSet
-        ? args.uploadedFromBooth ? "verified" : "pending"
-        : "incomplete",
-      source: "staff",
-      updatedAt: Date.now(),
-      updatedBy: staff.userId,
-    });
+    }, { userId: staff.userId, booth: args.uploadedFromBooth });
     await ctx.db.insert("auditEvents", {
       action: args.uploadedFromBooth
         ? "booth_identity_documents_verified"

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { normalizeSport } from "../shared/sports";
+import { existingDocuments, linkDocuments, registrationsForStudent } from "./participantDocuments";
 import { mutation } from "./_generated/server";
 
 function normalizePhone(value: string) {
@@ -92,6 +92,10 @@ export const registerPerformer = mutation({
     if (!phone) throw new ConvexError("Please enter a valid 10-digit Thai phone number");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
 
+    const registrations = await registrationsForStudent(ctx, studentId);
+    if (registrations.length && !registrations.some(row => normalizePhone(row.phone ?? "") === phone)) {
+      throw new ConvexError("The information does not match our registration record. Please contact staff");
+    }
     const existing = await ctx.db
       .query("participants")
       .withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", args.performerType))
@@ -136,6 +140,7 @@ export const registerPerformer = mutation({
         .first();
       participantId = await ctx.db.insert("participants", {
         ...registrationData,
+        ...await existingDocuments(ctx, studentId),
         studentId,
         orderNumber: (lastOrderedParticipant?.orderNumber ?? 0) + 1,
       });
@@ -148,6 +153,7 @@ export const registerPerformer = mutation({
     });
     const sessionId = await ctx.db.insert("uploadSessions", {
       participantId,
+      studentId,
       auditEventId: audit._id,
       expiresAt: Date.now() + 30 * 60 * 1000,
       used: false,
@@ -174,27 +180,21 @@ export const verifyIdentity = mutation({
     if (!/^\d{10}$/.test(studentId)) {
       throw new ConvexError("Student ID must contain exactly 10 digits");
     }
-    const registrations = args.sport?.trim()
-      ? await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", normalizeSport(args.sport!))).take(2)
-      : await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).take(2);
-    if (registrations.length > 1) throw new ConvexError("Choose the sport or activity you want to upload documents for");
-    const participant = registrations[0];
+    const registrations = await registrationsForStudent(ctx, studentId);
     const submittedPhone = normalizePhone(args.phone);
-    const registeredPhone = normalizePhone(participant?.phone ?? "");
-    const matches = participant &&
-      registeredPhone !== null &&
-      registeredPhone === submittedPhone;
-    if (!participant || !matches || submittedPhone === null) {
+    const participant = submittedPhone === null ? undefined : registrations.find(row => normalizePhone(row.phone ?? "") === submittedPhone);
+    if (!participant) {
       throw new ConvexError("The information does not match our registration record");
     }
     await ctx.db.patch("auditEvents", audit._id, { participantId: participant._id, successful: true });
     const sessionId = await ctx.db.insert("uploadSessions", {
       participantId: participant._id,
+      studentId,
       auditEventId: audit._id,
       expiresAt: Date.now() + 15 * 60 * 1000,
       used: false,
     });
-    return { sessionId, name: participant.fullNameThai, sport: participant.sport, faculty: participant.faculty };
+    return { sessionId, name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty };
   },
 });
 
@@ -216,13 +216,11 @@ export const completeUpload = mutation({
     if (!session || session.used || session.expiresAt < Date.now()) throw new ConvexError("Upload session expired");
     const participant = await ctx.db.get("participants", session.participantId);
     if (!participant) throw new ConvexError("Participant not found");
-    await ctx.db.patch("participants", participant._id, {
+    if (session.studentId && session.studentId !== participant.studentId) throw new ConvexError("Registration changed. Please verify your identity again");
+    await linkDocuments(ctx, participant, {
       profilePhotoId: args.profilePhotoId,
       nationalIdImageId: args.nationalIdImageId,
       studentIdImageId: args.studentIdImageId,
-      status: "pending",
-      source: "self",
-      updatedAt: Date.now(),
     });
     await ctx.db.patch("uploadSessions", session._id, { used: true });
     await ctx.db.patch("auditEvents", session.auditEventId, {

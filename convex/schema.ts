@@ -160,6 +160,7 @@ export default defineSchema({
     .index("by_staffUserId", ["staffUserId"]),
 
   uploadSessions: defineTable({
+    studentId: v.optional(v.string()),
     participantId: v.id("participants"),
     auditEventId: v.id("auditEvents"),
     expiresAt: v.number(),
