@@ -27,7 +27,7 @@ test("Co-sport searches allowlisted contact details without sensitive fields", a
     const result = await staff.query(api.directory.search, { term });
     expect(result.contacts).toHaveLength(1);
     expect(result.contacts[0]).toMatchObject({ email: "alice@example.com", lineId: "alice-line" });
-    expect(Object.keys(result.contacts[0]).sort()).toEqual(["_id", "fullNameThai", "fullNameEnglish", "nicknameThai", "nicknameEnglish", "faculty", "sport", "category", "participantKind", "phone", "email", "lineId", "instagram", "preferredContact"].sort());
+    expect(Object.keys(result.contacts[0]).sort()).toEqual(["_id", "fullNameThai", "fullNameEnglish", "nicknameThai", "nicknameEnglish", "faculty", "sport", "category", "categories", "participantKind", "phone", "email", "lineId", "instagram", "preferredContact"].sort());
   }
   expect(await staff.query(api.directory.search, { term: " " })).toEqual({ contacts: [], hasMore: false });
   expect((await staff.query(api.directory.search, { term: "PRIVATE" })).contacts).toEqual([]);

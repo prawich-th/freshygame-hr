@@ -1,3 +1,4 @@
+import { participantCategories } from "../shared/participantCategories";
 import { completeDocuments, existingDocuments, linkDocuments } from "./participantDocuments";
 import { internal } from "./_generated/api";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
@@ -39,6 +40,7 @@ const participantInput = v.object({
   eligibilityCertification: v.optional(v.string()),
   sport: v.string(),
   category: v.optional(v.string()),
+  categories: v.optional(v.array(v.string())),
 });
 
 function normalizePhone(value: string | undefined, studentId: string) {
@@ -68,6 +70,7 @@ const listItem = v.object({
   sport: v.string(),
   participantKind: v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
   category: v.union(v.string(), v.null()),
+  categories: v.array(v.string()),
   status: v.union(v.literal("incomplete"), v.literal("pending"), v.literal("verified"), v.literal("rejected")),
   hasNationalId: v.boolean(),
   photoUrl: v.union(v.string(), v.null()),
@@ -149,6 +152,7 @@ export const list = query({
           sport: resolveKind(participant) === "support" ? "Support team" : participant.sport,
           participantKind: resolveKind(participant),
           category: participant.category ?? null,
+          categories: participantCategories(participant),
           status: participant.status,
           hasNationalId: Boolean(participant.nationalIdImageId),
           photoUrl: participant.profilePhotoId
@@ -297,9 +301,10 @@ export const createParticipant = mutation({
     const participantKind = resolveKind(row);
     if (participantKind === "performer" && !row.performerType) throw new ConvexError("Choose a performer team");
     const sportDefinition = findSport(row.sport);
-    const category = row.category?.trim();
+    const categories = participantCategories(row);
+    const category = participantKind === "athlete" ? categories[0] : row.category?.trim();
     if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new ConvexError("Choose Camera or Support team");
-    if (participantKind === "athlete" && (!sportDefinition || !category || !sportDefinition.types.includes(category))) throw new ConvexError("Choose a sport and event type");
+    if (participantKind === "athlete" && (!sportDefinition || !categories.length || categories.some(value => !sportDefinition.types.includes(value)))) throw new ConvexError("Choose a sport and event type");
     const activity = participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name;
     const duplicate = await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", activity)).unique();
     if (duplicate) throw new ConvexError("This Student ID is already registered for this sport or activity. Open that registration to edit it.");
@@ -314,7 +319,7 @@ export const createParticipant = mutation({
       ...row, studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
       performerType: participantKind === "performer" ? row.performerType : undefined,
       sport: participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name,
-      category, phone, email, status: completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
+      category, categories: participantKind === "athlete" ? categories : undefined, phone, email, status: completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
       orderNumber: (last?.orderNumber ?? 0) + 1, updatedAt: now, updatedBy: staff.userId,
     });
     await ctx.db.insert("auditEvents", { action: "staff_participant_created", ipAddress: "authenticated-staff-session", participantId, staffUserId: staff.userId, successful: true, attempts: 1, createdAt: now });
@@ -352,8 +357,10 @@ export const importBatch = mutation({
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
       const email = rawEmail?.trim().toLowerCase() || undefined;
+      const categories = participantCategories({ categories: [...(existing && resolveKind(existing) === "athlete" ? participantCategories(existing) : []), ...participantCategories(row)] });
       const data = {
         ...participantFields,
+        ...(resolveKind(row) === "athlete" ? { categories, category: categories[0] } : { categories: undefined }),
         sport: resolveKind(row) === "support" ? "Support team" : row.performerType ?? normalizeSport(row.sport),
         performerType: resolveKind(row) === "support" ? undefined : row.performerType,
         faculty,
@@ -432,6 +439,7 @@ export const updateParticipant = mutation({
     ),
     sport: v.string(),
     category: v.optional(v.string()),
+    categories: v.optional(v.array(v.string())),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     lineId: v.optional(v.string()),
@@ -458,6 +466,15 @@ export const updateParticipant = mutation({
     }
 
     if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new ConvexError("Choose Camera or Support team");
+
+    const categories = participantCategories(args);
+    if (args.participantKind === "athlete") {
+      const definition = findSport(sport);
+      const existingCategories = resolveKind(participant) === "athlete" && normalizeSport(participant.sport) === sport ? participantCategories(participant) : [];
+      if (!categories.length || categories.some(value => !definition?.types.includes(value) && !existingCategories.includes(value))) {
+        throw new ConvexError("Choose a sport and event type");
+      }
+    }
 
     const activity = args.participantKind === "support" ? "Support team" : args.participantKind === "performer" ? args.performerType! : sport;
     const duplicate = await ctx.db.query("participants")
@@ -491,7 +508,8 @@ export const updateParticipant = mutation({
       sport: args.participantKind === "support" ? "Support team" : args.participantKind === "performer" && args.performerType
         ? args.performerType
         : sport,
-      category: args.category?.trim() || undefined,
+      category: args.participantKind === "athlete" ? categories[0] : args.category?.trim() || undefined,
+      categories: args.participantKind === "athlete" ? categories : undefined,
       email,
       phone,
       lineId: args.lineId?.trim() || undefined,

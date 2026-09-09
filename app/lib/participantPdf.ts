@@ -1,3 +1,4 @@
+import { categoryLabel } from "@/shared/participantCategories";
 import { participantKind } from "@/shared/participantKinds";
 import type { Doc } from "@/convex/_generated/dataModel";
 
@@ -157,7 +158,7 @@ export async function generateParticipantPdf(
     tableText(pdf, participant.faculty || "-", tableX + labelWidth + 1.5, tableY + rowHeight * 4 + 6.9, tableWidth - labelWidth - 3);
 
     simpleTableRow(pdf, participantKind(participant) === "support" ? "ทีมสนับสนุน" : participant.participantKind === "performer" ? "รายการแสดง" : "รายการกีฬา", participantKind(participant) === "support" ? "Support team" : participant.sport || "-", 18, 108, 174, 10.5, 36);
-    simpleTableRow(pdf, "ประเภทผู้เข้าร่วม", participantKind(participant) === "support" ? participant.category || "Support team" : participant.participantKind === "performer" ? "Performer" : participant.category || "Athlete / Participant", 18, 118.5, 174, 10.5, 36);
+    simpleTableRow(pdf, "ประเภทผู้เข้าร่วม", participantKind(participant) === "support" ? participant.category || "Support team" : participant.participantKind === "performer" ? "Performer" : categoryLabel(participant) || "Athlete / Participant", 18, 118.5, 174, 10.5, 36);
 
     pdf.setFont("THSarabunNew", "normal");
     pdf.setFontSize(17);

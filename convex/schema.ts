@@ -120,6 +120,7 @@ export default defineSchema({
     eligibilityCertification: v.optional(v.string()),
     sport: v.string(),
     category: v.optional(v.string()),
+    categories: v.optional(v.array(v.string())),
     profilePhotoId: v.optional(v.id("_storage")),
     nationalIdImageId: v.optional(v.id("_storage")),
     studentIdImageId: v.optional(v.id("_storage")),

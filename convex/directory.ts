@@ -1,3 +1,4 @@
+import { participantCategories } from "../shared/participantCategories";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireStaff } from "./access";
@@ -8,7 +9,7 @@ const contact = v.object({
   _id: v.id("participants"),
   fullNameThai: v.string(), fullNameEnglish: v.string(),
   nicknameThai: v.string(), nicknameEnglish: v.string(),
-  faculty: v.string(), sport: v.string(), category: v.string(),
+  faculty: v.string(), sport: v.string(), category: v.string(), categories: v.array(v.string()),
   participantKind: v.string(), phone: v.string(), email: v.string(),
   lineId: v.string(), instagram: v.string(), preferredContact: v.string(),
 });
@@ -36,7 +37,7 @@ export const search = query({
       contacts: matches.slice(0, 25).map(p => ({
         _id: p._id, fullNameThai: p.fullNameThai, fullNameEnglish: p.fullNameEnglish,
         nicknameThai: p.nicknameThai ?? "", nicknameEnglish: p.nicknameEnglish ?? "",
-        faculty: p.faculty, sport: p.sport, category: p.category ?? "",
+        faculty: p.faculty, sport: p.sport, category: p.category ?? "", categories: participantCategories(p),
         participantKind: participantKind(p), phone: p.phone ?? "", email: p.email ?? "",
         lineId: p.lineId ?? "", instagram: p.instagram ?? "", preferredContact: p.preferredContact ?? "",
       })),

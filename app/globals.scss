@@ -392,20 +392,27 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
 .filter-loading { min-height: 62px; display: flex; align-items: center; justify-content: center; gap: 9px; border-top: 1px solid $line; color: $muted; font-size: 13px; }
 .filter-loading .spinner { color: $brown; border-color: rgba(75,47,37,.2); border-top-color: currentColor; }
 
-.directory-shell { min-height: 100dvh; background: #f8f6f3; padding: 20px; }
-.directory-header { max-width: 960px; margin: 0 auto 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; > div { display: flex; align-items: center; gap: 12px; } }
+.directory-shell { min-height: 100dvh; background: #f8f6f3; padding: 8px 20px 16px; }
+.directory-header { max-width: 960px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; > div { display: flex; align-items: center; gap: 8px; } }
+.directory-header .brand { min-height: 44px; gap: 8px; }
+.directory-header .brand__mark { width: 30px; height: 30px; font-size: 12px; }
+.directory-header .brand__text strong { font-size: 11px; letter-spacing: 1px; }
+.directory-header .brand__text small { display: none; }
+.directory-header .button { min-height: 44px; padding-inline: 12px; font-size: 12px; border-radius: 8px; }
 .contact-directory { max-width: 960px; margin: 0 auto; width: 100%; }
-.contact-directory__intro { margin-bottom: 24px; h2 { font-size: clamp(28px, 6vw, 40px); margin: 8px 0; color: #4b2f25; } p { color: #74665e; line-height: 1.6; } }
-.contact-directory__search { label { display: block; font-weight: 600; margin-bottom: 8px; } > div { display: flex; gap: 8px; } input { min-width: 0; flex: 1; font-size: 16px; min-height: 48px; } button { min-height: 48px; } }
-.contact-directory__status { margin: 20px 0; color: #74665e; font-size: 14px; }
-.contact-directory__empty { text-align: center; padding: 54px 16px; color: #82736a; h3 { color: #4b2f25; margin: 14px 0 8px; } }
-.contact-directory__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.contact-card { min-width: 0; background: white; border: 1px solid #e8e0da; border-radius: 18px; padding: 22px; overflow-wrap: anywhere; }
-.contact-card__heading { display: flex; align-items: flex-start; gap: 12px; h3 { margin: 0 0 4px; font-size: 18px; } p { margin: 3px 0; color: #74665e; font-size: 14px; } }
-.contact-card__avatar { flex-shrink: 0; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #f0e7de; color: #6a4533; font-size: 22px; }
-.contact-card dl { margin: 20px 0; > div { padding: 9px 0; border-bottom: 1px solid #f1ede9; } dt { font-size: 12px; color: #82736a; margin-bottom: 4px; } dd { margin: 0; font-size: 15px; } a { color: #68422d; text-decoration: underline; } }
-.contact-card__actions { display: flex; gap: 10px; a { flex: 1; min-height: 46px; justify-content: center; } }
-@media (max-width: 640px) { .directory-shell { padding: 16px; } .directory-header { margin-bottom: 28px; > div { gap: 8px; } } .contact-directory__grid { grid-template-columns: minmax(0, 1fr); } .contact-card { padding: 18px; } }
+.contact-directory__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 24px; }
+.contact-directory__intro { h2 { font-size: clamp(26px, 4vw, 32px); margin: 4px 0; color: #4b2f25; } p { margin: 0; color: #74665e; font-size: 14px; line-height: 1.5; } }
+.contact-directory__search { min-width: 0; label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; } > div { display: flex; gap: 8px; } input { min-width: 0; flex: 1; font-size: 16px; height: 44px; } button { min-height: 44px; } }
+.contact-directory__status { margin: 12px 0; color: #74665e; font-size: 14px; }
+.contact-directory__empty { text-align: center; padding: 28px 16px; color: #82736a; h3 { color: #4b2f25; margin: 8px 0 4px; } p { margin: 0; } }
+.contact-directory__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.contact-card { min-width: 0; background: white; border: 1px solid #e8e0da; border-radius: 14px; padding: 16px; overflow-wrap: anywhere; }
+.contact-card__heading { display: flex; align-items: flex-start; gap: 10px; > div { min-width: 0; } h3 { margin: 0 0 2px; font-size: 18px; } p { margin: 0; color: #74665e; font-size: 14px; } }
+.contact-card__avatar { flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: #f0e7de; color: #6a4533; font-size: 18px; }
+.contact-card dl { margin: 12px 0; > div { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1ede9; } dt { font-size: 12px; color: #82736a; } dd { min-width: 0; margin: 0; font-size: 15px; } a { color: #68422d; text-decoration: underline; } }
+.contact-card__actions { display: flex; gap: 8px; a { flex: 1; min-height: 44px; justify-content: center; } }
+@media (max-width: 640px) { .directory-shell { padding: 8px 16px 12px; } .directory-header { margin-bottom: 12px; } .contact-directory__toolbar { grid-template-columns: minmax(0, 1fr); gap: 12px; } .contact-directory__grid { grid-template-columns: minmax(0, 1fr); } .contact-card { padding: 14px; } .contact-card dl > div { grid-template-columns: 96px minmax(0, 1fr); } }
+
 
 
 // Staff navigation uses the same layout for page links and workspace tabs.
@@ -439,3 +446,10 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
   .staff-topbar__actions { flex-wrap: wrap; }
   .staff-topbar h1 { font-size: clamp(21px, 4vw, 30px); }
 }
+
+@media (max-width: 380px) { .directory-header .brand__text { display: none; } }
+
+.category-options { margin: 0; padding: 12px; border: 1px solid $line; border-radius: 9px; display: grid; gap: 8px; }
+.category-options legend { padding: 0 4px; font-size: 14px; font-weight: 600; }
+.category-options label { display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; }
+.category-options input { width: 18px; height: 18px; flex-shrink: 0; accent-color: $brown; }
