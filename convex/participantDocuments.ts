@@ -34,7 +34,7 @@ export async function linkDocuments(ctx: MutationCtx, participant: Doc<"particip
       ...documents,
       // A document upload must not replace another sport's review decision.
       status: row.status === "verified" || row.status === "rejected" ? row.status
-        : completeDocuments(documents) ? staff?.booth && row._id === participant._id ? "verified" : "pending" : "incomplete",
+        : row.fullNameThai.trim() && row.fullNameEnglish.trim() && row.faculty.trim() && completeDocuments(documents) ? staff?.booth && row._id === participant._id ? "verified" : "pending" : "incomplete",
       updatedAt: Date.now(),
       ...(staff ? { updatedBy: staff.userId } : {}),
     });

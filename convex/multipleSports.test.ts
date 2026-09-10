@@ -55,7 +55,7 @@ test("one self upload links all sports, preserves decisions, and new sports inhe
   const auditEventId = await t.mutation(api.publicIntake.recordVisit,{ipAddress:"test"});
   const {sessionId} = await t.mutation(api.publicIntake.verifyIdentity,{auditEventId,studentId:participant.studentId,phone:participant.phone});
   const files = await uploadFiles(t);
-  await t.mutation(api.publicIntake.completeUpload,{sessionId,...files});
+  await t.mutation(api.publicIntake.completeUpload,{sessionId,...files,confirmed:true,profile:{fullNameThai:participant.fullNameThai,fullNameEnglish:participant.fullNameEnglish,faculty:participant.faculty}});
   expect(await t.run(ctx => ctx.db.get("participants",first))).toMatchObject({...files,status:"pending"});
   expect(await t.run(ctx => ctx.db.get("participants",second))).toMatchObject({...files,status:"rejected"});
   expect((await t.run(ctx => ctx.db.get("participants",other)))?.nationalIdImageId).toBeUndefined();
@@ -104,4 +104,29 @@ test("public performer registration cannot use a new phone to gain shared upload
     fullNameThai:participant.fullNameThai,fullNameEnglish:participant.fullNameEnglish,
     faculty:"คณะแพทยศาสตร์",sex:"Male",phone:"0899999999",email:"test@example.com",preferredContact:"Phone",pdpaConsent:true,
   })).rejects.toThrow("does not match");
+});
+
+
+test("admin draft profiles require an identity phone and athletes must complete and confirm them", async () => {
+  const {t, staff} = await setup();
+  const draft = {...participant, fullNameThai:"", fullNameEnglish:"", faculty:""};
+  await expect(staff.mutation(api.participants.createParticipant, {participant:draft})).rejects.toThrow("names are required");
+  await expect(staff.mutation(api.participants.createParticipant, {participant:{...draft, phone:undefined}, incomplete:true})).rejects.toThrow("registered phone");
+  const registrarId = await t.run(ctx => ctx.db.insert("users", {role:"registrar", active:true}));
+  await expect(t.withIdentity({subject:`${registrarId}|session`}).mutation(api.participants.createParticipant, {participant:draft, incomplete:true})).rejects.toThrow();
+  const id = await staff.mutation(api.participants.createParticipant, {participant:draft, incomplete:true});
+  const other = await staff.mutation(api.participants.createParticipant, {participant:{...draft, sport:"Basketball"}, incomplete:true});
+  const files = await uploadFiles(t);
+  await staff.mutation(api.participants.completeStaffUpload, {participantId:id,...files});
+  expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({status:"incomplete"});
+  const auditEventId = await t.mutation(api.publicIntake.recordVisit, {ipAddress:"test"});
+  const verified = await t.mutation(api.publicIntake.verifyIdentity, {auditEventId, studentId:participant.studentId, phone:participant.phone});
+  expect(verified.profile).toMatchObject({fullNameThai:"", faculty:""});
+  const args = {sessionId:verified.sessionId,...files};
+  await expect(t.mutation(api.publicIntake.completeUpload,args)).rejects.toThrow("complete and confirm");
+  await expect(t.mutation(api.publicIntake.completeUpload,{...args,confirmed:true,profile:verified.profile})).rejects.toThrow("names are required");
+  expect(await t.run(ctx => ctx.db.get("uploadSessions",verified.sessionId))).toMatchObject({used:false});
+  const profile = {fullNameThai:"ชื่อ ทดสอบ",fullNameEnglish:"Test Athlete",faculty:participant.faculty,email:"athlete@example.com"};
+  await t.mutation(api.publicIntake.completeUpload, {...args,profile,confirmed:true});
+  for (const participantId of [id,other]) expect(await t.run(ctx => ctx.db.get("participants",participantId))).toMatchObject({...profile,...files,status:"pending"});
 });

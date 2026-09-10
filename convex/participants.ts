@@ -287,17 +287,18 @@ export const exportSelected = query({
 });
 
 export const createParticipant = mutation({
-  args: { participant: participantInput },
+  args: { participant: participantInput, incomplete: v.optional(v.boolean()) },
   returns: v.id("participants"),
-  handler: async (ctx, { participant: row }) => {
+  handler: async (ctx, { participant: row, incomplete }) => {
     const staff = await requireEditor(ctx);
+    if (incomplete) await requireAdmin(ctx);
     const studentId = row.studentId.trim();
     const fullNameThai = row.fullNameThai.trim();
     const fullNameEnglish = row.fullNameEnglish.trim();
     const faculty = row.faculty.trim();
     if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
-    if (!fullNameThai || !fullNameEnglish) throw new ConvexError("Thai and English names are required");
-    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
+    if (!incomplete && (!fullNameThai || !fullNameEnglish)) throw new ConvexError("Thai and English names are required");
+    if ((faculty || !incomplete) && !["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
     const participantKind = resolveKind(row);
     if (participantKind === "performer" && !row.performerType) throw new ConvexError("Choose a performer team");
     const sportDefinition = findSport(row.sport);
@@ -309,6 +310,7 @@ export const createParticipant = mutation({
     const duplicate = await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", studentId).eq("sport", activity)).unique();
     if (duplicate) throw new ConvexError("This Student ID is already registered for this sport or activity. Open that registration to edit it.");
     const phone = normalizePhone(row.phone, studentId);
+    if (incomplete && !phone) throw new ConvexError("A registered phone number is required so the athlete can verify their identity");
     const email = row.email?.trim().toLowerCase() || undefined;
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Please enter a valid email address");
     const last = await ctx.db.query("participants").withIndex("by_orderNumber").order("desc").first();
@@ -319,7 +321,7 @@ export const createParticipant = mutation({
       ...row, studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
       performerType: participantKind === "performer" ? row.performerType : undefined,
       sport: participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name,
-      category, categories: participantKind === "athlete" ? categories : undefined, phone, email, status: completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
+      category, categories: participantKind === "athlete" ? categories : undefined, phone, email, status: fullNameThai && fullNameEnglish && faculty && completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
       orderNumber: (last?.orderNumber ?? 0) + 1, updatedAt: now, updatedBy: staff.userId,
     });
     await ctx.db.insert("auditEvents", { action: "staff_participant_created", ipAddress: "authenticated-staff-session", participantId, staffUserId: staff.userId, successful: true, attempts: 1, createdAt: now });

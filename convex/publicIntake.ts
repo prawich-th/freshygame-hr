@@ -2,6 +2,13 @@ import { ConvexError, v } from "convex/values";
 import { existingDocuments, linkDocuments, registrationsForStudent } from "./participantDocuments";
 import { mutation } from "./_generated/server";
 
+const profileInput = v.object({
+  fullNameThai: v.string(), fullNameEnglish: v.string(), faculty: v.string(),
+  nicknameThai: v.optional(v.string()), nicknameEnglish: v.optional(v.string()),
+  sex: v.optional(v.string()), email: v.optional(v.string()),
+  lineId: v.optional(v.string()), instagram: v.optional(v.string()), preferredContact: v.optional(v.string()),
+});
+
 function normalizePhone(value: string) {
   let phone = value.replace(/\D/g, "");
   if (phone.startsWith("66")) {
@@ -169,7 +176,7 @@ export const verifyIdentity = mutation({
     phone: v.string(),
     auditEventId: v.id("auditEvents"),
   },
-  returns: v.object({ sessionId: v.id("uploadSessions"), name: v.string(), sport: v.string(), faculty: v.string() }),
+  returns: v.object({ sessionId: v.id("uploadSessions"), name: v.string(), sport: v.string(), faculty: v.string(), phone: v.string(), profile: profileInput }),
   handler: async (ctx, args) => {
     const audit = await ctx.db.get("auditEvents", args.auditEventId);
     if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) throw new ConvexError("Verification session expired");
@@ -194,7 +201,11 @@ export const verifyIdentity = mutation({
       expiresAt: Date.now() + 15 * 60 * 1000,
       used: false,
     });
-    return { sessionId, name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty };
+    return { sessionId, name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
+      fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty,
+      nicknameThai: participant.nicknameThai, nicknameEnglish: participant.nicknameEnglish, sex: participant.sex,
+      email: participant.email, lineId: participant.lineId, instagram: participant.instagram, preferredContact: participant.preferredContact,
+    } };
   },
 });
 
@@ -209,7 +220,7 @@ export const generateUploadUrl = mutation({
 });
 
 export const completeUpload = mutation({
-  args: { sessionId: v.id("uploadSessions"), profilePhotoId: v.id("_storage"), nationalIdImageId: v.id("_storage"), studentIdImageId: v.id("_storage") },
+  args: { profile: v.optional(profileInput), confirmed: v.optional(v.literal(true)), sessionId: v.id("uploadSessions"), profilePhotoId: v.id("_storage"), nationalIdImageId: v.id("_storage"), studentIdImageId: v.id("_storage") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get("uploadSessions", args.sessionId);
@@ -217,6 +228,26 @@ export const completeUpload = mutation({
     const participant = await ctx.db.get("participants", session.participantId);
     if (!participant) throw new ConvexError("Participant not found");
     if (session.studentId && session.studentId !== participant.studentId) throw new ConvexError("Registration changed. Please verify your identity again");
+    const audit = await ctx.db.get("auditEvents", session.auditEventId);
+    if (audit?.action !== "performer_registration_started" && (!args.profile || !args.confirmed)) {
+      throw new ConvexError("Please complete and confirm your information before submitting");
+    }
+    if (args.profile) {
+      if (!args.confirmed) throw new ConvexError("Please confirm your information");
+      const profile = {
+        ...args.profile,
+        fullNameThai: args.profile.fullNameThai.trim(),
+        fullNameEnglish: args.profile.fullNameEnglish.trim(),
+        faculty: args.profile.faculty.trim(),
+        email: args.profile.email?.trim().toLowerCase() || undefined,
+      };
+      if (!profile.fullNameThai || !profile.fullNameEnglish) throw new ConvexError("Thai and English names are required");
+      if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(profile.faculty)) throw new ConvexError("Choose a supported faculty");
+      if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) throw new ConvexError("Please enter a valid email address");
+      for (const row of await registrationsForStudent(ctx, participant.studentId)) {
+        await ctx.db.patch("participants", row._id, profile);
+      }
+    }
     await linkDocuments(ctx, participant, {
       profilePhotoId: args.profilePhotoId,
       nationalIdImageId: args.nationalIdImageId,

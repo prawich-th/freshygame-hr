@@ -11,12 +11,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { Brand } from "./Brand";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
-type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string };
+type Profile = { fullNameThai: string; fullNameEnglish: string; faculty: string; nicknameThai?: string; nicknameEnglish?: string; sex?: string; email?: string; lineId?: string; instagram?: string; preferredContact?: string };
+type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string; phone: string; profile: Profile };
 
 export function SelfUpload() {
   const verifyIdentity = useMutation(api.publicIntake.verifyIdentity);
   const generateUploadUrl = useMutation(api.publicIntake.generateUploadUrl);
   const completeUpload = useMutation(api.publicIntake.completeUpload);
+  const [profile, setProfile] = useState<Profile>({ fullNameThai: "", fullNameEnglish: "", faculty: "" });
+  const [confirmed, setConfirmed] = useState(false);
   const [step, setStep] = useState(1);
   const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
   const [verified, setVerified] = useState<Verified | null>(null);
@@ -44,7 +47,7 @@ export function SelfUpload() {
         phone: String(data.get("phone")),
         auditEventId: auditId,
       });
-      setVerified(result); setStep(2);
+      setVerified(result); setProfile(result.profile); setStep(2);
     } catch (e) { setError(errorMessage(e, "Verify your details")); }
     finally { setBusy(false); }
   }
@@ -63,6 +66,7 @@ export function SelfUpload() {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
     if (!verified || !files.profile || !files.nationalId || !files.studentId) return setError("กรุณาอัปโหลดรูปทั้ง 3 รายการ / Please upload all three images");
+    if (!confirmed) return setError("Please confirm your information");
     setBusy(true);
     try {
       const uploadImage = async (file: File, kind: UploadImageKind) => {
@@ -75,8 +79,8 @@ export function SelfUpload() {
       const profilePhotoId = await uploadImage(files.profile, "profile");
       const nationalIdImageId = await uploadImage(files.nationalId, "nationalId");
       const studentIdImageId = await uploadImage(files.studentId, "studentId");
-      await completeUpload({ sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
-      setStep(3);
+      await completeUpload({ profile, confirmed: true, sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
+      setStep(4);
     } catch (e) { setError(errorMessage(e, "Upload images")); }
     finally { setBusy(false); }
   }
@@ -92,7 +96,7 @@ export function SelfUpload() {
         <div className="intake-main__top"><Link className="text-link" href="/"><ArrowLeft size={15} /> กลับหน้าหลัก</Link></div>
         <div className="intake-card">
           <div className="stepper">
-            {([[1,"ยืนยันตัวตน"],[2,"ส่งเอกสาร"],[3,"เสร็จสิ้น"]] as const).map(([number,label], index) => <div key={number} style={{display:"contents"}}><div className={`stepper__item ${step >= number ? "stepper__item--active" : ""}`}><b>{step > number ? <Check size={13}/> : number}</b><span>{label}</span></div>{index < 2 && <div className="stepper__line" />}</div>)}
+            {([[1,"ยืนยันตัวตน"],[2,"ส่งเอกสาร"],[3,"ยืนยันข้อมูล"],[4,"เสร็จสิ้น"]] as const).map(([number,label], index) => <div key={number} style={{display:"contents"}}><div className={`stepper__item ${step >= number ? "stepper__item--active" : ""}`}><b>{step > number ? <Check size={13}/> : number}</b><span>{label}</span></div>{index < 3 && <div className="stepper__line" />}</div>)}
           </div>
 
           {step === 1 && <>
@@ -108,19 +112,36 @@ export function SelfUpload() {
 
           {step === 2 && verified && <>
             <h2>ส่งเอกสารเพิ่มเติม</h2><p>Upload once for all your sports and activities. Your profile photo, national ID, and student ID images will be linked automatically to every registration with your Student ID. Images are compressed automatically, and both ID cards receive an official-use watermark before upload.</p>
-            <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20}/></span><div><strong>{verified.name}</strong><span>{verified.sport} · {verified.faculty}</span></div></div>
-            <form onSubmit={handleUpload}>
+            <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20}/></span><div><strong>{verified.name || "Incomplete profile / กรุณากรอกข้อมูลให้ครบ"}</strong><span>{verified.sport} · {verified.faculty}</span></div></div>
+            <form onSubmit={event => { event.preventDefault(); if (!files.profile || !files.nationalId || !files.studentId) { setError("Please upload all three images"); return; } setError(""); setStep(3); }}>
               <div className="document-upload-grid">
                 <div className="upload-drop"><input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("profile", e.target.files?.[0])}/><label htmlFor="photo">{preview ? <img className="photo-preview" src={preview} alt="Profile preview"/> : <Camera size={28}/>}<strong>รูปโปรไฟล์</strong><span>Profile photo</span></label></div>
                 <div className={`upload-drop ${files.nationalId ? "upload-drop--ready" : ""}`}><input id="national-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("nationalId", e.target.files?.[0])}/><label htmlFor="national-card">{files.nationalId ? <Check size={28}/> : <UploadCloud size={28}/>}<strong>บัตรประชาชน</strong><span>{files.nationalId?.name ?? "National ID card image"}</span></label></div>
                 <div className={`upload-drop ${files.studentId ? "upload-drop--ready" : ""}`}><input id="student-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("studentId", e.target.files?.[0])}/><label htmlFor="student-card">{files.studentId ? <Check size={28}/> : <UploadCloud size={28}/>}<strong>บัตรนักศึกษา</strong><span>{files.studentId?.name ?? "Student ID card image"}</span></label></div>
               </div>
               {error && <div className="notice notice--error">{error}</div>}
-              <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner"/> : <><UploadCloud size={17}/> ส่งเอกสาร</>}</button>
+              <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner"/> : <><ArrowRight size={17}/> ตรวจสอบข้อมูล / Review information</>}</button>
             </form>
           </>}
 
-          {step === 3 && <div className="success-panel"><div className="success-panel__check"><Check size={34}/></div><h2>ส่งเอกสารเรียบร้อยแล้ว</h2><p>Your documents are now waiting for staff review. You can safely close this page.</p><div className="notice notice--success"><ShieldCheck size={14} style={{verticalAlign:"middle",marginRight:6}}/>ข้อมูลของคุณถูกส่งอย่างปลอดภัยแล้ว</div><Link href="/" className="button button--ghost button--large" style={{marginTop:22}}>กลับหน้าหลัก</Link></div>}
+          {step === 3 && verified && <>
+            <h2>ยืนยันข้อมูล / Confirm information</h2>
+            <p>Complete the missing required information and check your details before submitting. These personal details apply to all your registrations.</p>
+            <div className="notice notice--info">Registered phone: {verified.phone}<br/>Sports / activities: {verified.sport}<br/>Files: {[files.profile?.name, files.nationalId?.name, files.studentId?.name].join(", ")}</div>
+            <form onSubmit={handleUpload}>
+              <fieldset disabled={busy} style={{border: 0, padding: 0, margin: 0}}>
+              <div className="form-grid">
+                {([['fullNameThai', 'ชื่อ-สกุล / Thai full name'], ['fullNameEnglish', 'English full name'], ['nicknameThai', 'Thai nickname'], ['nicknameEnglish', 'English nickname'], ['sex', 'Sex'], ['email', 'Email'], ['lineId', 'LINE ID'], ['instagram', 'Instagram'], ['preferredContact', 'Preferred contact']] as const).map(([key, label]) => <div className="field" key={key}><label htmlFor={`confirm-${key}`}>{label}{(key === 'fullNameThai' || key === 'fullNameEnglish') && ' *'}</label><input id={`confirm-${key}`} className="input" type={key === 'email' ? 'email' : 'text'} required={key === 'fullNameThai' || key === 'fullNameEnglish'} value={profile[key] ?? ''} onChange={e => { setProfile(current => ({...current, [key]: e.target.value})); setConfirmed(false); }}/></div>)}
+                <div className="field field--wide"><label htmlFor="confirm-faculty">Faculty *</label><select id="confirm-faculty" className="select" required value={profile.faculty} onChange={e => { setProfile(current => ({...current, faculty: e.target.value})); setConfirmed(false); }}><option value="">Select faculty</option>{['คณะแพทยศาสตร์', 'คณะศิลปศาสตร์', 'วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์'].map(faculty => <option key={faculty}>{faculty}</option>)}</select></div>
+              </div>
+              <label><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I confirm that my information and selected documents are correct.</label>
+              {error && <div role="alert" className="notice notice--error">{error}</div>}
+              <div className="participant-edit__actions"><button type="button" className="button button--ghost" onClick={() => { setConfirmed(false); setError(''); setStep(2); }}>Back to documents</button><button className="button button--primary" disabled={!confirmed || busy}>{busy ? <span className="spinner"/> : 'Confirm and submit'}</button></div>
+              </fieldset>
+            </form>
+          </>}
+
+          {step === 4 && <div className="success-panel"><div className="success-panel__check"><Check size={34}/></div><h2>ส่งเอกสารเรียบร้อยแล้ว</h2><p>Your documents are now waiting for staff review. You can safely close this page.</p><div className="notice notice--success"><ShieldCheck size={14} style={{verticalAlign:"middle",marginRight:6}}/>ข้อมูลของคุณถูกส่งอย่างปลอดภัยแล้ว</div><Link href="/" className="button button--ghost button--large" style={{marginTop:22}}>กลับหน้าหลัก</Link></div>}
         </div>
       </section>
     </main>
