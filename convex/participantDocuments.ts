@@ -32,6 +32,7 @@ export async function linkDocuments(ctx: MutationCtx, participant: Doc<"particip
   for (const row of rows) {
     await ctx.db.patch("participants", row._id, {
       ...documents,
+      ...(staff && (uploaded.nationalIdImageId || uploaded.studentIdImageId) ? { signature: undefined, signedName: undefined, signedAt: undefined } : {}),
       // A document upload must not replace another sport's review decision.
       status: row.status === "verified" || row.status === "rejected" ? row.status
         : row.fullNameThai.trim() && row.fullNameEnglish.trim() && row.faculty.trim() && completeDocuments(documents) ? staff?.booth && row._id === participant._id ? "verified" : "pending" : "incomplete",

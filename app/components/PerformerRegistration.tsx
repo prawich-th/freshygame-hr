@@ -1,6 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { SignaturePad } from "./SignaturePad";
+import type { Signature } from "@/shared/signature";
 import { errorMessage, UserFacingError } from "../lib/errors";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -18,6 +20,7 @@ import {
 import Link from "next/link";
 import { FormEvent, type InputHTMLAttributes, useEffect, useState } from "react";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
+import { ParticipantInformationFields } from "./ParticipantInformationFields";
 import { Brand } from "./Brand";
 
 type PerformerType = "Katakorn" | "Cheerleader";
@@ -34,6 +37,7 @@ export function PerformerRegistration() {
   const registerPerformer = useMutation(api.publicIntake.registerPerformer);
   const generateUploadUrl = useMutation(api.publicIntake.generateUploadUrl);
   const completeUpload = useMutation(api.publicIntake.completeUpload);
+  const [signature, setSignature] = useState<Signature>([]);
   const [step, setStep] = useState(1);
   const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
   const [registration, setRegistration] = useState<Registration | null>(null);
@@ -84,6 +88,15 @@ export function PerformerRegistration() {
         lineId: optional(data.get("lineId")),
         instagram: optional(data.get("instagram")),
         preferredContact: String(data.get("preferredContact")) as PreferredContact,
+        jerseyNumber: String(data.get("jerseyNumber") ?? ""),
+        allergies: String(data.get("allergies") ?? ""),
+        medicalConditions: String(data.get("medicalConditions") ?? ""),
+        nationalIdNumber: String(data.get("nationalIdNumber") ?? ""),
+        birthDate: String(data.get("birthDate") ?? ""),
+        guardianPhone: String(data.get("guardianPhone") ?? ""),
+        drugAllergies: String(data.get("drugAllergies") ?? ""),
+        foodAllergies: String(data.get("foodAllergies") ?? ""),
+        hospitalizationHistory: String(data.get("hospitalizationHistory") ?? ""),
         pdpaConsent: true,
       });
       setRegistration(result);
@@ -110,6 +123,7 @@ export function PerformerRegistration() {
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (signature.flat().length < 2) { setError("Please draw your signature before submitting"); return; }
     setError("");
     if (!registration || !files.profile || !files.nationalId || !files.studentId) {
       setError("กรุณาอัปโหลดรูปทั้ง 3 รายการ / Please upload all three images");
@@ -132,6 +146,7 @@ export function PerformerRegistration() {
       const nationalIdImageId = await uploadImage(files.nationalId, "nationalId");
       const studentIdImageId = await uploadImage(files.studentId, "studentId");
       await completeUpload({
+        signature,
         sessionId: registration.sessionId,
         profilePhotoId,
         nationalIdImageId,
@@ -180,6 +195,7 @@ export function PerformerRegistration() {
                 <label><input type="radio" name="performerType" value="Cheerleader" required /><span><Sparkles size={20} /><strong>Cheerleader</strong><small>เชียร์ลีดเดอร์</small></span></label>
               </div>
               <div className="form-grid">
+                <ParticipantInformationFields required/>
                 <Field name="studentId" label="รหัสนักศึกษา / Student ID" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="6909680123" />
                 <div className="field"><label>คณะ / Faculty <span>*</span></label><select className="select registration-select" name="faculty" required defaultValue=""><option value="" disabled>เลือกคณะ / Select faculty</option><option value="คณะแพทยศาสตร์">คณะแพทยศาสตร์</option><option value="คณะศิลปศาสตร์">คณะศิลปศาสตร์</option><option value="วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์">วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์</option></select></div>
                 <Field name="fullNameThai" label="ชื่อ-สกุล (ไทย) / Thai full name" required placeholder="ชื่อ นามสกุล" />
@@ -201,7 +217,7 @@ export function PerformerRegistration() {
 
           {step === 2 && registration && <>
             <h2>ส่งเอกสารยืนยัน</h2>
-            <p>Upload a profile photo, national ID card, and student ID card. ID images receive an official-use watermark before upload.</p>
+            <p>Upload a profile photo, national ID card, and student ID card. Both ID copies will appear in the PDF with a signed certification.</p>
             <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20} /></span><div><strong>{registration.name}</strong><span>Performer · {registration.performerType}</span></div></div>
             <form onSubmit={handleUpload}>
               <div className="document-upload-grid">
@@ -209,6 +225,7 @@ export function PerformerRegistration() {
                 <div className={`upload-drop ${files.nationalId ? "upload-drop--ready" : ""}`}><input id="performer-national-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("nationalId", event.target.files?.[0])} /><label htmlFor="performer-national-card">{files.nationalId ? <Check size={28} /> : <UploadCloud size={28} />}<strong>บัตรประชาชน</strong><span>{files.nationalId?.name ?? "National ID card image"}</span></label></div>
                 <div className={`upload-drop ${files.studentId ? "upload-drop--ready" : ""}`}><input id="performer-student-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("studentId", event.target.files?.[0])} /><label htmlFor="performer-student-card">{files.studentId ? <Check size={28} /> : <UploadCloud size={28} />}<strong>บัตรนักศึกษา</strong><span>{files.studentId?.name ?? "Student ID card image"}</span></label></div>
               </div>
+              <SignaturePad disabled={busy} onChange={setSignature}/>
               {error && <div className="notice notice--error">{error}</div>}
               <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner" /> : <><UploadCloud size={17} /> ส่งใบสมัคร</>}</button>
             </form>

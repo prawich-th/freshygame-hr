@@ -1,6 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { SignaturePad } from "./SignaturePad";
+import type { Signature } from "@/shared/signature";
 import { errorMessage, UserFacingError } from "../lib/errors";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -8,10 +10,11 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Check, LockKeyhole, ShieldCheck, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { ParticipantInformationFields, type ParticipantInformation } from "./ParticipantInformationFields";
 import { Brand } from "./Brand";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
-type Profile = { fullNameThai: string; fullNameEnglish: string; faculty: string; nicknameThai?: string; nicknameEnglish?: string; sex?: string; email?: string; lineId?: string; instagram?: string; preferredContact?: string };
+type Profile = ParticipantInformation & { fullNameThai: string; fullNameEnglish: string; faculty: string; nicknameThai?: string; nicknameEnglish?: string; sex?: string; email?: string; lineId?: string; instagram?: string; preferredContact?: string };
 type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string; phone: string; profile: Profile };
 
 export function SelfUpload() {
@@ -20,6 +23,7 @@ export function SelfUpload() {
   const completeUpload = useMutation(api.publicIntake.completeUpload);
   const [profile, setProfile] = useState<Profile>({ fullNameThai: "", fullNameEnglish: "", faculty: "" });
   const [confirmed, setConfirmed] = useState(false);
+  const [signature, setSignature] = useState<Signature>([]);
   const [step, setStep] = useState(1);
   const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
   const [verified, setVerified] = useState<Verified | null>(null);
@@ -66,6 +70,7 @@ export function SelfUpload() {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
     if (!verified || !files.profile || !files.nationalId || !files.studentId) return setError("กรุณาอัปโหลดรูปทั้ง 3 รายการ / Please upload all three images");
+    if (signature.flat().length < 2) return setError("Please draw your signature before submitting");
     if (!confirmed) return setError("Please confirm your information");
     setBusy(true);
     try {
@@ -79,7 +84,7 @@ export function SelfUpload() {
       const profilePhotoId = await uploadImage(files.profile, "profile");
       const nationalIdImageId = await uploadImage(files.nationalId, "nationalId");
       const studentIdImageId = await uploadImage(files.studentId, "studentId");
-      await completeUpload({ profile, confirmed: true, sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
+      await completeUpload({ signature, profile, confirmed: true, sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
       setStep(4);
     } catch (e) { setError(errorMessage(e, "Upload images")); }
     finally { setBusy(false); }
@@ -111,7 +116,7 @@ export function SelfUpload() {
           </>}
 
           {step === 2 && verified && <>
-            <h2>ส่งเอกสารเพิ่มเติม</h2><p>Upload once for all your sports and activities. Your profile photo, national ID, and student ID images will be linked automatically to every registration with your Student ID. Images are compressed automatically, and both ID cards receive an official-use watermark before upload.</p>
+            <h2>ส่งเอกสารเพิ่มเติม</h2><p>Upload once for all your sports and activities. Your profile photo, national ID, and student ID images will be linked automatically to every registration with your Student ID. Images are compressed automatically. The PDF adds a signed certified-copy layout to both ID images.</p>
             <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20}/></span><div><strong>{verified.name || "Incomplete profile / กรุณากรอกข้อมูลให้ครบ"}</strong><span>{verified.sport} · {verified.faculty}</span></div></div>
             <form onSubmit={event => { event.preventDefault(); if (!files.profile || !files.nationalId || !files.studentId) { setError("Please upload all three images"); return; } setError(""); setStep(3); }}>
               <div className="document-upload-grid">
@@ -131,12 +136,14 @@ export function SelfUpload() {
             <form onSubmit={handleUpload}>
               <fieldset disabled={busy} style={{border: 0, padding: 0, margin: 0}}>
               <div className="form-grid">
-                {([['fullNameThai', 'ชื่อ-สกุล / Thai full name'], ['fullNameEnglish', 'English full name'], ['nicknameThai', 'Thai nickname'], ['nicknameEnglish', 'English nickname'], ['sex', 'Sex'], ['email', 'Email'], ['lineId', 'LINE ID'], ['instagram', 'Instagram'], ['preferredContact', 'Preferred contact']] as const).map(([key, label]) => <div className="field" key={key}><label htmlFor={`confirm-${key}`}>{label}{(key === 'fullNameThai' || key === 'fullNameEnglish') && ' *'}</label><input id={`confirm-${key}`} className="input" type={key === 'email' ? 'email' : 'text'} required={key === 'fullNameThai' || key === 'fullNameEnglish'} value={profile[key] ?? ''} onChange={e => { setProfile(current => ({...current, [key]: e.target.value})); setConfirmed(false); }}/></div>)}
+                <ParticipantInformationFields value={profile} required onChange={(key, value) => { setProfile(current => ({...current, [key]: value})); setConfirmed(false); }}/>
+                {([['fullNameThai', 'ชื่อ-สกุล / Thai full name'], ['fullNameEnglish', 'English full name'], ['nicknameThai', 'Thai nickname'], ['nicknameEnglish', 'English nickname'], ['sex', 'Sex'], ['email', 'Email'], ['lineId', 'LINE ID'], ['instagram', 'Instagram'], ['preferredContact', 'Preferred contact']] as const).map(([key, label]) => <div className="field" key={key}><label htmlFor={`confirm-${key}`}>{label}{(key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex') && ' *'}</label><input id={`confirm-${key}`} className="input" type={key === 'email' ? 'email' : 'text'} required={key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex'} value={profile[key] ?? ''} onChange={e => { setProfile(current => ({...current, [key]: e.target.value})); setConfirmed(false); }}/></div>)}
                 <div className="field field--wide"><label htmlFor="confirm-faculty">Faculty *</label><select id="confirm-faculty" className="select" required value={profile.faculty} onChange={e => { setProfile(current => ({...current, faculty: e.target.value})); setConfirmed(false); }}><option value="">Select faculty</option>{['คณะแพทยศาสตร์', 'คณะศิลปศาสตร์', 'วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์'].map(faculty => <option key={faculty}>{faculty}</option>)}</select></div>
               </div>
+              <SignaturePad disabled={busy} onChange={value => { setSignature(value); setConfirmed(false); }}/>
               <label><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I confirm that my information and selected documents are correct.</label>
               {error && <div role="alert" className="notice notice--error">{error}</div>}
-              <div className="participant-edit__actions"><button type="button" className="button button--ghost" onClick={() => { setConfirmed(false); setError(''); setStep(2); }}>Back to documents</button><button className="button button--primary" disabled={!confirmed || busy}>{busy ? <span className="spinner"/> : 'Confirm and submit'}</button></div>
+              <div className="participant-edit__actions"><button type="button" className="button button--ghost" onClick={() => { setConfirmed(false); setSignature([]); setError(''); setStep(2); }}>Back to documents</button><button className="button button--primary" disabled={!confirmed || busy}>{busy ? <span className="spinner"/> : 'Confirm and submit'}</button></div>
               </fieldset>
             </form>
           </>}

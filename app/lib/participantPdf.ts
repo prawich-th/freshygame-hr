@@ -1,3 +1,4 @@
+import { ageOnDate } from "@/shared/personalInformation";
 import { categoryLabel } from "@/shared/participantCategories";
 import { participantKind } from "@/shared/participantKinds";
 import type { Doc } from "@/convex/_generated/dataModel";
@@ -102,74 +103,89 @@ export async function generateParticipantPdf(
       imageData(entry.photoUrl), imageData(entry.nationalIdImageUrl), imageData(entry.studentIdImageUrl),
     ]);
 
-    pdf.setTextColor(0, 0, 0);
-    pdf.setDrawColor(155, 155, 155);
-    pdf.setLineWidth(0.18);
+    const kind = participantKind(participant);
+    const title = kind === "athlete" ? "รายงานข้อมูลนักกีฬา" : kind === "performer" ? "รายงานข้อมูลผู้แสดง" : "รายงานข้อมูลทีมสนับสนุน";
+    pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15);
+    pdf.rect(14, 9, 182, 17);
+    pdf.line(153, 9, 153, 26);
+    textBox(pdf, `${title} Freshy Game 2026`, 17, 10, 133, 8, 18, true, "center");
+    textBox(pdf, "คณะสีน้ำตาล", 17, 18, 133, 7, 15, false, "center");
+    textBox(pdf, `เอกสาร อส.บ.0${kind === "athlete" ? 1 : kind === "performer" ? 2 : 3}`, 154, 10, 41, 7, 13, false, "center");
+    textBox(pdf, `ลำดับในคณะสี ${String(participant.orderNumber ?? index + 1).padStart(2, "0")}`, 154, 18, 41, 7, 13, false, "center");
+    textBox(pdf, kind === "athlete" ? "1. ข้อมูลนักกีฬา" : "1. ข้อมูลผู้เข้าร่วม", 14, 27, 182, 7, 15, true);
+    let y = 35;
+    const row = (cells: [string, number][], height = 8, shaded = false) => {
+      let x = 14;
+      for (const [value, width] of cells) { cell(pdf, value, x, y, width, height, shaded); x += width; }
+      y += height;
+    };
+    row([["ชื่อ-สกุล", 27], [participant.fullNameThai || "-", 92], ["ชื่อเล่น", 21], [participant.nicknameThai || "-", 42]]);
+    row([["Full name", 27], [participant.fullNameEnglish || "-", 92], ["Nickname", 21], [participant.nicknameEnglish || "-", 42]], 8, true);
+    row([["รหัสนักศึกษา", 27], [participant.studentId, 64], ["เพศ", 25], [participant.sex || "-", 66]]);
+    row([["รหัสประชาชน", 27], [participant.nationalIdNumber || "-", 155]], 8, true);
+    const birthDate = participant.birthDate ? participant.birthDate.split("-").reverse().join("/") + " (ค.ศ.)" : "-";
+    const age = participant.birthDate ? ageOnDate(participant.birthDate) : participant.age;
+    row([["เกิดวันที่", 27], [birthDate, 64], ["อายุ", 25], [age == null ? "-" : `${age} ปี`, 66]]);
+    row([["คณะ", 27], [participant.faculty || "-", 92], ["โทร", 21], [participant.phone || "-", 42]], 8, true);
+    y += 2;
+    row([["ประเภทนักกีฬา", 34], [participant.qualificationCriteria || "ยังไม่ได้ระบุ", 148]]);
+    row([["เข้าข่ายเนื่องจาก", 34], [[participant.qualificationDetails, participant.eligibilityCertification].filter(Boolean).join(" / ") || "ยังไม่ได้ระบุ", 148]], 8, true);
+    y += 2;
+    row([[kind === "athlete" ? "กีฬา" : "กิจกรรม", 21], [participant.sport || "-", 48], ["ประเภท", 21], [categoryLabel(participant) || "-", 60], ["เลขเสื้อ", 17], [participant.jerseyNumber || "-", 15]]);
+    textBox(pdf, "2. ข้อมูลผู้ติดต่อฉุกเฉิน", 14, y + 3, 182, 7, 15, true);
+    y += 11;
+    // Contact name and relationship have not been collected; never infer them from the participant.
+    row([["ชื่อผู้ติดต่อ", 27], ["ยังไม่ได้ระบุ", 74], ["เกี่ยวข้อง", 26], ["ผู้ปกครอง", 55]]);
+    row([["โทรผู้ปกครอง", 27], [participant.guardianPhone || "ยังไม่ได้ระบุ", 155]], 8, true);
 
-    pdf.setFont("THSarabunNew", "normal");
-    pdf.setFontSize(17);
-    pdf.text("คณะทำงานทีมสีน้ำตาล", 105, 16, { align: "center" });
-    pdf.text(`เอกสารหมายเลข ${participantKind(participant) === "support" ? 3 : participantKind(participant) === "performer" ? 2 : 1}`, 192, 16, { align: "right" });
-    pdf.text("โครงการ TU Freshy Game 2026", 105, 24, { align: "center" });
-    pdf.setFont("THSarabunNew", "bold");
-    pdf.setFontSize(20);
-    pdf.text(participantKind(participant) === "support" ? "แบบรายงานบันทึกข้อมูลทีมสนับสนุน" : participant.participantKind === "performer" ? "แบบรายงานบันทึกข้อมูลผู้แสดง" : "แบบรายงานบันทึกข้อมูลผู้เข้าร่วมการแข่งขัน", 105, 36, { align: "center" });
+    y += 2;
+    const health: [string, string][] = [
+      ["โรคประจำตัว", participant.medicalConditions || "ยังไม่ได้ระบุ"],
+      ["ประวัติการแพ้ยา", participant.drugAllergies || "ยังไม่ได้ระบุ"],
+      ["ประวัติการแพ้อาหาร", participant.foodAllergies || "ยังไม่ได้ระบุ"],
+      ["ประวัติการเข้าโรงพยาบาล / การผ่าตัด", participant.hospitalizationHistory || "ยังไม่ได้ระบุ"],
+      ...(participant.allergies ? [["ข้อมูลการแพ้ที่บันทึกไว้เดิม", participant.allergies] as [string, string]] : []),
+    ];
+    // Share the available space between medical rows, keeping every value intact.
+    const available = 180 - y;
+    let fontSize = 13;
+    let heights: number[] = [];
+    for (; fontSize >= 8; fontSize -= 0.5) {
+      pdf.setFont("THSarabunNew", "normal"); pdf.setFontSize(fontSize);
+      heights = health.map(([label, value]) => Math.max(8, Math.max(pdf.splitTextToSize(label, 54).length, pdf.splitTextToSize(value, 122).length) * fontSize * 0.3528 * 1.1 + 3));
+      if (heights.reduce((sum, height) => sum + height, 0) <= available) break;
+    }
+    if (fontSize < 8) throw new Error(`Medical history for ${participant.studentId} is too long for a readable one-page form. Please shorten the medical notes before exporting.`);
+    health.forEach(([label, value], rowIndex) => {
+      cell(pdf, label, 14, y, 58, heights[rowIndex], rowIndex % 2 === 1, fontSize);
+      cell(pdf, value, 72, y, 124, heights[rowIndex], rowIndex % 2 === 1, fontSize);
+      y += heights[rowIndex];
+    });
 
-    const profileX = 18;
-    const profileY = 46;
-    const profileWidth = 39;
-    const profileHeight = 52;
-    pdf.rect(profileX, profileY, profileWidth, profileHeight);
-    if (profile) addContainedImage(pdf, profile, profileX + 0.8, profileY + 0.8, profileWidth - 1.6, profileHeight - 1.6);
-    else profilePlaceholder(pdf, profileX, profileY, profileWidth, profileHeight);
-
-    const tableX = 59.5;
-    const tableY = 46;
-    const tableWidth = 132.5;
-    const rowHeight = 10.4;
-    pdf.rect(tableX, tableY, tableWidth, rowHeight * 5);
-    for (let row = 1; row < 5; row += 1) pdf.line(tableX, tableY + rowHeight * row, tableX + tableWidth, tableY + rowHeight * row);
-
-    const labelWidth = 24;
-    const thaiNameWidth = 61;
-    const nicknameLabelWidth = 23;
-    pdf.line(tableX + labelWidth, tableY, tableX + labelWidth, tableY + rowHeight * 5);
-    pdf.line(tableX + labelWidth + thaiNameWidth, tableY, tableX + labelWidth + thaiNameWidth, tableY + rowHeight * 3);
-    pdf.line(tableX + labelWidth + thaiNameWidth + nicknameLabelWidth, tableY, tableX + labelWidth + thaiNameWidth + nicknameLabelWidth, tableY + rowHeight * 3);
-
-    tableText(pdf, "รหัสนักศึกษา", tableX + 1.5, tableY + 6.9, labelWidth - 3);
-    tableText(pdf, participant.studentId, tableX + labelWidth + 1.5, tableY + 6.9, thaiNameWidth - 3);
-    tableText(pdf, "ลำดับที่", tableX + labelWidth + thaiNameWidth + 1.5, tableY + 6.9, nicknameLabelWidth - 3);
-    tableText(pdf, String(participant.orderNumber ?? index + 1), tableX + labelWidth + thaiNameWidth + nicknameLabelWidth + 1.5, tableY + 6.9, tableWidth - labelWidth - thaiNameWidth - nicknameLabelWidth - 3);
-
-    tableText(pdf, "ชื่อ-สกุล", tableX + 1.5, tableY + rowHeight + 6.9);
-    tableText(pdf, participant.fullNameThai || "-", tableX + labelWidth + 1.5, tableY + rowHeight + 6.9, thaiNameWidth - 3);
-    tableText(pdf, "ชื่อเล่น", tableX + labelWidth + thaiNameWidth + 1.5, tableY + rowHeight + 6.9);
-    tableText(pdf, participant.nicknameThai || "-", tableX + labelWidth + thaiNameWidth + nicknameLabelWidth + 1.5, tableY + rowHeight + 6.9, tableWidth - labelWidth - thaiNameWidth - nicknameLabelWidth - 3);
-
-    tableText(pdf, "Full Name", tableX + 1.5, tableY + rowHeight * 2 + 6.9);
-    tableText(pdf, participant.fullNameEnglish || "-", tableX + labelWidth + 1.5, tableY + rowHeight * 2 + 6.9, thaiNameWidth - 3);
-    tableText(pdf, "Nickname", tableX + labelWidth + thaiNameWidth + 1.5, tableY + rowHeight * 2 + 6.9);
-    tableText(pdf, participant.nicknameEnglish || "-", tableX + labelWidth + thaiNameWidth + nicknameLabelWidth + 1.5, tableY + rowHeight * 2 + 6.9, tableWidth - labelWidth - thaiNameWidth - nicknameLabelWidth - 3);
-
-    tableText(pdf, "โทร", tableX + 1.5, tableY + rowHeight * 3 + 6.9);
-    tableText(pdf, participant.phone || "-", tableX + labelWidth + 1.5, tableY + rowHeight * 3 + 6.9, tableWidth - labelWidth - 3);
-    tableText(pdf, "คณะ", tableX + 1.5, tableY + rowHeight * 4 + 6.9);
-    tableText(pdf, participant.faculty || "-", tableX + labelWidth + 1.5, tableY + rowHeight * 4 + 6.9, tableWidth - labelWidth - 3);
-
-    simpleTableRow(pdf, participantKind(participant) === "support" ? "ทีมสนับสนุน" : participant.participantKind === "performer" ? "รายการแสดง" : "รายการกีฬา", participantKind(participant) === "support" ? "Support team" : participant.sport || "-", 18, 108, 174, 10.5, 36);
-    simpleTableRow(pdf, "ประเภทผู้เข้าร่วม", participantKind(participant) === "support" ? participant.category || "Support team" : participant.participantKind === "performer" ? "Performer" : categoryLabel(participant) || "Athlete / Participant", 18, 118.5, 174, 10.5, 36);
-
-    pdf.setFont("THSarabunNew", "normal");
-    pdf.setFontSize(17);
-    pdf.text("เอกสารยืนยันตัวตน", 105, 137, { align: "center" });
-    documentPanel(pdf, "บัตรประจำตัวประชาชน", nationalId, 18, 141, 87, 109);
-    documentPanel(pdf, "บัตรประจำตัวนักศึกษา", studentId, 105, 141, 87, 109);
-
-    pdf.setFont("THSarabunNew", "normal");
-    pdf.setFontSize(15);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text("เอกสารนี้ออกโดยระบบอัตโนมัติ ไม่ต้องมีลายมือชื่อกำกับ", 105, 285, { align: "center" });
+    // Keep the reference form's photo / document copies / applicant certification
+    // together in three columns, with ample room reserved for the evidence images.
+    const imageY = 189;
+    textBox(pdf, "รูปถ่าย", 14, imageY - 8, 32, 8, 14, false, "center");
+    if (profile) addContainedImage(pdf, profile, 14, imageY, 32, 45);
+    else profilePlaceholder(pdf, 14, imageY, 32, 45);
+    compactDocument(pdf, "บัตรนักศึกษา", studentId, 51, imageY, 79, 42);
+    compactDocument(pdf, "บัตรประชาชน", nationalId, 51, 239, 79, 42);
+    const signatureX = 135;
+    const signatureWidth = 61;
+    pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15);
+    pdf.rect(signatureX, imageY, signatureWidth, 92);
+    pdf.setFillColor(245, 245, 245); pdf.rect(signatureX, imageY, signatureWidth, 10, "FD");
+    textBox(pdf, "การรับรองข้อมูลและสำเนา", signatureX + 2, imageY + 1, signatureWidth - 4, 8, 15, true, "center");
+    textBox(pdf, "ขอรับรองว่าเป็นความจริงทุกประการ", signatureX + 3, 202, signatureWidth - 6, 12, 14, false, "center");
+    textBox(pdf, "สำเนาถูกต้อง\nใช้สำหรับการแข่งขันกีฬา\nTU Freshy Games 2026", signatureX + 3, 215, signatureWidth - 6, 19, 14, false, "center");
+    drawSignature(pdf, participant, 140, 237, 51, 16);
+    pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15);
+    pdf.line(signatureX + 6, 255, signatureX + signatureWidth - 6, 255);
+    textBox(pdf, `(${participant.signedName || participant.fullNameThai || "-"})`, signatureX + 2, 257, signatureWidth - 4, 9, 14, false, "center");
+    textBox(pdf, participant.signature?.length ? "ผู้สมัคร / ผู้รับรองสำเนา" : "ยังไม่ได้ลงลายมือชื่อ", signatureX + 2, 266, signatureWidth - 4, 7, 13, false, "center");
+    const signedDate = participant.signedAt ? new Date(participant.signedAt).toLocaleDateString("th-TH", {timeZone: "Asia/Bangkok"}) : "";
+    if (signedDate) textBox(pdf, signedDate, signatureX + 2, 273, signatureWidth - 4, 7, 13, false, "center");
+    textBox(pdf, "ออกโดยกองอำนวยการคณะสีน้ำตาล", 14, 283, 182, 7, 13, false, "center");
   }
 
   if (options?.save !== false) {
@@ -180,42 +196,57 @@ export async function generateParticipantPdf(
 
 type Pdf = InstanceType<(typeof import("jspdf"))["jsPDF"]>;
 
-function tableText(pdf: Pdf, value: string, x: number, y: number, maxWidth = 100) {
-  pdf.setFont("THSarabunNew", "normal");
-  const baseSize = 14;
-  pdf.setFontSize(baseSize);
-  const measuredWidth = pdf.getTextWidth(value);
-  if (measuredWidth > maxWidth) pdf.setFontSize(Math.max(9, baseSize * maxWidth / measuredWidth));
+// Fit text without clipping or silently dropping information. Oversized inputs fail
+// with an actionable message rather than creating extra pages or unreadable text.
+function textBox(pdf: Pdf, value: string, x: number, y: number, width: number, height: number, size = 13, bold = false, align: "left" | "center" = "left") {
+  pdf.setFont("THSarabunNew", bold ? "bold" : "normal");
+  let lines: string[] = [];
+  for (; size >= 8; size -= 0.5) {
+    pdf.setFontSize(size);
+    lines = pdf.splitTextToSize(value, width - 3);
+    if (lines.length * size * 0.3528 * 1.1 <= height - 2) break;
+  }
+  if (size < 8) throw new Error("A field is too long for the one-page form. Please shorten the record before exporting.");
   pdf.setTextColor(0, 0, 0);
-  pdf.text(value, x, y);
+  const lineHeight = size * 0.3528 * 1.1;
+  const firstBaseline = y + (height - lines.length * lineHeight) / 2 + lineHeight * 0.78;
+  lines.forEach((line, index) => pdf.text(line, align === "center" ? x + width / 2 : x + 1.5, firstBaseline + index * lineHeight, {align}));
 }
 
-function simpleTableRow(pdf: Pdf, label: string, value: string, x: number, y: number, width: number, height: number, labelWidth: number) {
-  pdf.setDrawColor(155, 155, 155);
-  pdf.rect(x, y, width, height);
-  pdf.line(x + labelWidth, y, x + labelWidth, y + height);
-  tableText(pdf, label, x + 1.5, y + 7, labelWidth - 3);
-  tableText(pdf, value, x + labelWidth + 1.5, y + 7, width - labelWidth - 3);
+function cell(pdf: Pdf, value: string, x: number, y: number, width: number, height: number, shaded: boolean, size = 13) {
+  pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15);
+  if (shaded) { pdf.setFillColor(245, 245, 245); pdf.rect(x, y, width, height, "FD"); }
+  else pdf.rect(x, y, width, height);
+  textBox(pdf, value, x, y, width, height, size);
 }
 
-function documentPanel(pdf: Pdf, label: string, data: string | null, x: number, y: number, width: number, height: number) {
-  const headerHeight = 10;
-  pdf.setDrawColor(155, 155, 155);
-  pdf.rect(x, y, width, height);
-  pdf.line(x, y + headerHeight, x + width, y + headerHeight);
-  pdf.setFont("THSarabunNew", "normal");
-  pdf.setFontSize(15);
-  pdf.setTextColor(0, 0, 0);
-  pdf.text(label, x + width / 2, y + 6.8, { align: "center" });
-  if (data) addContainedImage(pdf, data, x + 1.5, y + headerHeight + 1.5, width - 3, height - headerHeight - 3);
-  else placeholder(pdf, "ยังไม่ได้ส่งเอกสาร", x, y + headerHeight, width, height - headerHeight);
+function drawSignature(pdf: Pdf, participant: Doc<"participants">, x: number, y: number, width: number, height = width * 0.3) {
+  const points = participant.signature?.flat() ?? [];
+  if (points.length < 2) return;
+  // Center the actual ink, rather than the blank margins of the capture canvas.
+  const minX = Math.min(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const inkWidth = Math.max(1, Math.max(...points.map(point => point.x)) - minX);
+  const inkHeight = Math.max(1, Math.max(...points.map(point => point.y)) - minY);
+  const scale = Math.min(width / inkWidth, height / inkHeight);
+  const left = x + (width - inkWidth * scale) / 2;
+  const top = y + (height - inkHeight * scale) / 2;
+  pdf.setDrawColor(25, 25, 25); pdf.setLineWidth(0.35);
+  for (const stroke of participant.signature ?? []) {
+    for (let i = 1; i < stroke.length; i++) pdf.line(left + (stroke[i - 1].x - minX) * scale, top + (stroke[i - 1].y - minY) * scale, left + (stroke[i].x - minX) * scale, top + (stroke[i].y - minY) * scale);
+  }
 }
 
-function placeholder(pdf: Pdf, label: string, x: number, y: number, width: number, height: number) {
-  pdf.setFont("THSarabunNew", "normal");
-  pdf.setFontSize(14);
-  pdf.setTextColor(105, 105, 105);
-  pdf.text(label, x + width / 2, y + height / 2, { align: "center" });
+function compactDocument(pdf: Pdf, label: string, data: string | null, x: number, y: number, width: number, height: number) {
+  textBox(pdf, label, x, y - 8, width, 8, 14, false, "center");
+  pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15); pdf.rect(x, y, width, height);
+  if (data) addContainedImage(pdf, data, x + 0.5, y + 0.5, width - 1, height - 1);
+  else textBox(pdf, "ยังไม่ได้ส่งเอกสาร", x, y + height / 2 - 4, width, 8, 12, false, "center");
+  if (data) {
+    pdf.setDrawColor(30, 30, 30); pdf.setLineWidth(0.3);
+    pdf.line(x + width * 0.63, y + height, x + width * 0.87, y);
+    pdf.line(x + width * 0.70, y + height, x + width * 0.94, y);
+  }
 }
 
 function profilePlaceholder(pdf: Pdf, x: number, y: number, width: number, height: number) {
@@ -224,7 +255,7 @@ function profilePlaceholder(pdf: Pdf, x: number, y: number, width: number, heigh
   pdf.setFont("THSarabunNew", "bold");
   pdf.setFontSize(14);
   pdf.setTextColor(255, 255, 255);
-  pdf.text("Profile picture", x + width / 2, y + height / 2, { align: "center" });
+  pdf.text("Profile", x + width / 2, y + height / 2, { align: "center" });
 }
 
 function addContainedImage(pdf: Pdf, data: string, x: number, y: number, width: number, height: number) {

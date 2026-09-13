@@ -1,3 +1,4 @@
+import { normalizeInformation } from "./participantInformation";
 import { participantCategories } from "../shared/participantCategories";
 import { completeDocuments, existingDocuments, linkDocuments } from "./participantDocuments";
 import { internal } from "./_generated/api";
@@ -34,6 +35,16 @@ const participantInput = v.object({
   lineId: v.optional(v.string()),
   instagram: v.optional(v.string()),
   preferredContact: v.optional(v.string()),
+  jerseyNumber: v.optional(v.string()),
+  allergies: v.optional(v.string()),
+  medicalConditions: v.optional(v.string()),
+    nationalIdNumber: v.optional(v.string()),
+    birthDate: v.optional(v.string()),
+    guardianPhone: v.optional(v.string()),
+    drugAllergies: v.optional(v.string()),
+    foodAllergies: v.optional(v.string()),
+    hospitalizationHistory: v.optional(v.string()),
+
   qualificationCriteria: v.optional(v.string()),
   pdpaConsent: v.optional(v.string()),
   qualificationDetails: v.optional(v.string()),
@@ -215,7 +226,7 @@ export const get = query({
     const participant = await ctx.db.get("participants", args.participantId);
     if (!participant) return null;
     const protectedParticipant = staff.role === "viewer"
-      ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined }
+      ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined, nationalIdNumber: undefined, signature: undefined, signedName: undefined, signedAt: undefined }
       : participant;
     return {
       participant: protectedParticipant,
@@ -252,7 +263,7 @@ export const exportSport = query({
       .take(200);
     return await Promise.all(participants.map(async (participant) => ({
       participant: staff.role === "viewer"
-        ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined }
+        ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined, nationalIdNumber: undefined, signature: undefined, signedName: undefined, signedAt: undefined }
         : participant,
       photoUrl: participant.profilePhotoId ? await ctx.storage.getUrl(participant.profilePhotoId) : null,
       nationalIdImageUrl: staff.role !== "viewer" && participant.nationalIdImageId ? await ctx.storage.getUrl(participant.nationalIdImageId) : null,
@@ -275,7 +286,7 @@ export const exportSelected = query({
       if (!participant) continue;
       entries.push({
         participant: staff.role === "viewer"
-          ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined }
+          ? { ...participant, nationalIdImageId: undefined, studentIdImageId: undefined, nationalIdNumber: undefined, signature: undefined, signedName: undefined, signedAt: undefined }
           : participant,
         photoUrl: participant.profilePhotoId ? await ctx.storage.getUrl(participant.profilePhotoId) : null,
         nationalIdImageUrl: staff.role !== "viewer" && participant.nationalIdImageId ? await ctx.storage.getUrl(participant.nationalIdImageId) : null,
@@ -318,7 +329,7 @@ export const createParticipant = mutation({
     const documents = await existingDocuments(ctx, studentId);
     const participantId = await ctx.db.insert("participants", {
       ...documents,
-      ...row, studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
+      ...row, ...normalizeInformation(row), studentId, fullNameThai, fullNameEnglish, faculty, participantKind,
       performerType: participantKind === "performer" ? row.performerType : undefined,
       sport: participantKind === "support" ? "Support team" : participantKind === "performer" ? row.performerType! : sportDefinition!.name,
       category, categories: participantKind === "athlete" ? categories : undefined, phone, email, status: fullNameThai && fullNameEnglish && faculty && completeDocuments(documents) ? "pending" : "incomplete", source: "staff",
@@ -447,6 +458,16 @@ export const updateParticipant = mutation({
     lineId: v.optional(v.string()),
     instagram: v.optional(v.string()),
     preferredContact: v.optional(v.string()),
+  jerseyNumber: v.optional(v.string()),
+  allergies: v.optional(v.string()),
+  medicalConditions: v.optional(v.string()),
+    nationalIdNumber: v.optional(v.string()),
+    birthDate: v.optional(v.string()),
+    guardianPhone: v.optional(v.string()),
+    drugAllergies: v.optional(v.string()),
+    foodAllergies: v.optional(v.string()),
+    hospitalizationHistory: v.optional(v.string()),
+
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -493,7 +514,7 @@ export const updateParticipant = mutation({
     }
 
     const identityDocuments = studentId !== participant.studentId
-      ? { profilePhotoId: undefined, nationalIdImageId: undefined, studentIdImageId: undefined, ...await existingDocuments(ctx, studentId) }
+      ? { signature: undefined, signedName: undefined, signedAt: undefined, profilePhotoId: undefined, nationalIdImageId: undefined, studentIdImageId: undefined, ...await existingDocuments(ctx, studentId) }
       : {};
     await ctx.db.patch("participants", participant._id, {
       ...identityDocuments,
@@ -517,6 +538,8 @@ export const updateParticipant = mutation({
       lineId: args.lineId?.trim() || undefined,
       instagram: args.instagram?.trim().replace(/^@/, "") || undefined,
       preferredContact: args.preferredContact?.trim() || undefined,
+      ...normalizeInformation(args),
+      signature: undefined, signedName: undefined, signedAt: undefined,
       updatedAt: Date.now(),
       updatedBy: staff.userId,
     });

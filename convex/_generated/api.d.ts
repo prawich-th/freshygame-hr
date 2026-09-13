@@ -14,8 +14,10 @@ import type * as directory from "../directory.js";
 import type * as http from "../http.js";
 import type * as maintenance from "../maintenance.js";
 import type * as participantDocuments from "../participantDocuments.js";
+import type * as participantInformation from "../participantInformation.js";
 import type * as participants from "../participants.js";
 import type * as publicIntake from "../publicIntake.js";
+import type * as signatures from "../signatures.js";
 
 import type {
   ApiFromModules,
@@ -30,8 +32,10 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   maintenance: typeof maintenance;
   participantDocuments: typeof participantDocuments;
+  participantInformation: typeof participantInformation;
   participants: typeof participants;
   publicIntake: typeof publicIntake;
+  signatures: typeof signatures;
 }>;
 
 /**

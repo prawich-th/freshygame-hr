@@ -1,8 +1,13 @@
+import { signatureValidator, certifySignature } from "./signatures";
+import { normalizeInformation } from "./participantInformation";
 import { ConvexError, v } from "convex/values";
 import { existingDocuments, linkDocuments, registrationsForStudent } from "./participantDocuments";
 import { mutation } from "./_generated/server";
 
+const informationFields = { nationalIdNumber: v.optional(v.string()), birthDate: v.optional(v.string()), guardianPhone: v.optional(v.string()), drugAllergies: v.optional(v.string()), foodAllergies: v.optional(v.string()), hospitalizationHistory: v.optional(v.string()),  jerseyNumber: v.optional(v.string()), allergies: v.optional(v.string()), medicalConditions: v.optional(v.string()) };
+
 const profileInput = v.object({
+  ...informationFields,
   fullNameThai: v.string(), fullNameEnglish: v.string(), faculty: v.string(),
   nicknameThai: v.optional(v.string()), nicknameEnglish: v.optional(v.string()),
   sex: v.optional(v.string()), email: v.optional(v.string()),
@@ -72,6 +77,7 @@ export const registerPerformer = mutation({
       v.literal("Instagram"),
       v.literal("Email"),
     ),
+    ...informationFields,
     pdpaConsent: v.literal(true),
   },
   returns: v.object({
@@ -108,6 +114,7 @@ export const registerPerformer = mutation({
       .withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", args.performerType))
       .unique();
     const registrationData = {
+      ...normalizeInformation(args, true),
       participantKind: "performer",
       performerType: args.performerType,
       fullNameThai,
@@ -204,6 +211,8 @@ export const verifyIdentity = mutation({
     return { sessionId, name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
       fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty,
       nicknameThai: participant.nicknameThai, nicknameEnglish: participant.nicknameEnglish, sex: participant.sex,
+      nationalIdNumber: participant.nationalIdNumber, birthDate: participant.birthDate, guardianPhone: participant.guardianPhone, drugAllergies: participant.drugAllergies, foodAllergies: participant.foodAllergies, hospitalizationHistory: participant.hospitalizationHistory,
+      jerseyNumber: participant.jerseyNumber, allergies: participant.allergies, medicalConditions: participant.medicalConditions,
       email: participant.email, lineId: participant.lineId, instagram: participant.instagram, preferredContact: participant.preferredContact,
     } };
   },
@@ -220,7 +229,7 @@ export const generateUploadUrl = mutation({
 });
 
 export const completeUpload = mutation({
-  args: { profile: v.optional(profileInput), confirmed: v.optional(v.literal(true)), sessionId: v.id("uploadSessions"), profilePhotoId: v.id("_storage"), nationalIdImageId: v.id("_storage"), studentIdImageId: v.id("_storage") },
+  args: { signature: v.optional(signatureValidator), profile: v.optional(profileInput), confirmed: v.optional(v.literal(true)), sessionId: v.id("uploadSessions"), profilePhotoId: v.id("_storage"), nationalIdImageId: v.id("_storage"), studentIdImageId: v.id("_storage") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get("uploadSessions", args.sessionId);
@@ -244,8 +253,15 @@ export const completeUpload = mutation({
       if (!profile.fullNameThai || !profile.fullNameEnglish) throw new ConvexError("Thai and English names are required");
       if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(profile.faculty)) throw new ConvexError("Choose a supported faculty");
       if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) throw new ConvexError("Please enter a valid email address");
+      Object.assign(profile, normalizeInformation(args.profile, true), certifySignature(args.signature, profile.fullNameThai));
       for (const row of await registrationsForStudent(ctx, participant.studentId)) {
         await ctx.db.patch("participants", row._id, profile);
+      }
+    }
+    if (!args.profile) {
+      const certification = certifySignature(args.signature, participant.fullNameThai);
+      for (const row of await registrationsForStudent(ctx, participant.studentId)) {
+        await ctx.db.patch("participants", row._id, certification);
       }
     }
     await linkDocuments(ctx, participant, {

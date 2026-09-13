@@ -455,3 +455,16 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
 .category-options legend { padding: 0 4px; font-size: 14px; font-weight: 600; }
 .category-options label { display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; }
 .category-options input { width: 18px; height: 18px; flex-shrink: 0; accent-color: $brown; }
+
+.document-preview.image-editor > .image-editor__stage {
+  display: block; position: relative; aspect-ratio: auto; overflow: hidden;
+}
+.document-preview.image-editor > .image-editor__controls {
+  display: flex; flex-wrap: wrap; gap: 6px; aspect-ratio: auto;
+  border: 0; background: transparent; border-radius: 0; justify-content: flex-start;
+}
+.image-editor__crop {
+  position: absolute; pointer-events: none; border: 2px solid #fff;
+  outline: 1px solid #4b2f25; box-shadow: 0 0 0 2000px rgba(0, 0, 0, .45);
+}
+.image-editor__hint { font-size: 12px; line-height: 1.5; margin: 0; }
