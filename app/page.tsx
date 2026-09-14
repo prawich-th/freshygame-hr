@@ -30,7 +30,7 @@ export default function Home() {
             <span className="portal-action__icon"><Sparkles size={28} /></span>
             <span className="portal-action__label">สำหรับนักแสดง</span>
             <strong>ลงทะเบียนนักแสดง</strong>
-            <span className="portal-action__description">Katakorn และ Cheerleader กรอกข้อมูลส่วนตัวและส่งเอกสารได้ด้วยตนเอง</span>
+            <span className="portal-action__description">Katakorn, Cheerleader และสมาชิกขบวนพาเหรด กรอกข้อมูลส่วนตัวและส่งเอกสารได้ด้วยตนเอง</span>
             <span className="portal-action__button">เริ่มลงทะเบียน <ArrowRight size={18} /></span>
           </Link>
 

@@ -15,7 +15,7 @@ import { Brand } from "./Brand";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
 type Profile = ParticipantInformation & { fullNameThai: string; fullNameEnglish: string; faculty: string; nicknameThai?: string; nicknameEnglish?: string; sex?: string; email?: string; lineId?: string; instagram?: string; preferredContact?: string };
-type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string; phone: string; profile: Profile };
+type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string; phone: string; requiresJersey: boolean; profile: Profile };
 
 export function SelfUpload() {
   const verifyIdentity = useMutation(api.publicIntake.verifyIdentity);
@@ -136,7 +136,7 @@ export function SelfUpload() {
             <form onSubmit={handleUpload}>
               <fieldset disabled={busy} style={{border: 0, padding: 0, margin: 0}}>
               <div className="form-grid">
-                <ParticipantInformationFields value={profile} required onChange={(key, value) => { setProfile(current => ({...current, [key]: value})); setConfirmed(false); }}/>
+                <ParticipantInformationFields value={profile} includeJersey={verified.requiresJersey} required onChange={(key, value) => { setProfile(current => ({...current, [key]: value})); setConfirmed(false); }}/>
                 {([['fullNameThai', 'ชื่อ-สกุล / Thai full name'], ['fullNameEnglish', 'English full name'], ['nicknameThai', 'Thai nickname'], ['nicknameEnglish', 'English nickname'], ['sex', 'Sex'], ['email', 'Email'], ['lineId', 'LINE ID'], ['instagram', 'Instagram'], ['preferredContact', 'Preferred contact']] as const).map(([key, label]) => <div className="field" key={key}><label htmlFor={`confirm-${key}`}>{label}{(key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex') && ' *'}</label><input id={`confirm-${key}`} className="input" type={key === 'email' ? 'email' : 'text'} required={key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex'} value={profile[key] ?? ''} onChange={e => { setProfile(current => ({...current, [key]: e.target.value})); setConfirmed(false); }}/></div>)}
                 <div className="field field--wide"><label htmlFor="confirm-faculty">Faculty *</label><select id="confirm-faculty" className="select" required value={profile.faculty} onChange={e => { setProfile(current => ({...current, faculty: e.target.value})); setConfirmed(false); }}><option value="">Select faculty</option>{['คณะแพทยศาสตร์', 'คณะศิลปศาสตร์', 'วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์'].map(faculty => <option key={faculty}>{faculty}</option>)}</select></div>
               </div>

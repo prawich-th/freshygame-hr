@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { PARADE_TYPES } from "@/shared/participantKinds";
 import { SignaturePad } from "./SignaturePad";
 import type { Signature } from "@/shared/signature";
 import { errorMessage, UserFacingError } from "../lib/errors";
@@ -23,7 +24,7 @@ import { compressImage, type UploadImageKind } from "../lib/compressImage";
 import { ParticipantInformationFields } from "./ParticipantInformationFields";
 import { Brand } from "./Brand";
 
-type PerformerType = "Katakorn" | "Cheerleader";
+type PerformerType = "Katakorn" | "Cheerleader" | "Parade";
 type Sex = "Male" | "Female" | "Non-binary" | "Prefer not to say";
 type PreferredContact = "Phone" | "LINE" | "Instagram" | "Email";
 type Faculty = "คณะแพทยศาสตร์" | "คณะศิลปศาสตร์" | "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์";
@@ -38,6 +39,7 @@ export function PerformerRegistration() {
   const generateUploadUrl = useMutation(api.publicIntake.generateUploadUrl);
   const completeUpload = useMutation(api.publicIntake.completeUpload);
   const [signature, setSignature] = useState<Signature>([]);
+  const [performerType, setPerformerType] = useState<PerformerType | null>(null);
   const [step, setStep] = useState(1);
   const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
   const [registration, setRegistration] = useState<Registration | null>(null);
@@ -76,6 +78,9 @@ export function PerformerRegistration() {
       const result = await registerPerformer({
         auditEventId: auditId,
         performerType: String(data.get("performerType")) as PerformerType,
+        category: performerType === "Parade" ? String(data.get("category")) : undefined,
+        emergencyContactName: String(data.get("emergencyContactName") ?? ""),
+        emergencyContactRelationship: String(data.get("emergencyContactRelationship") ?? ""),
         studentId: String(data.get("studentId")),
         fullNameThai: String(data.get("fullNameThai")),
         fullNameEnglish: String(data.get("fullNameEnglish")),
@@ -88,7 +93,6 @@ export function PerformerRegistration() {
         lineId: optional(data.get("lineId")),
         instagram: optional(data.get("instagram")),
         preferredContact: String(data.get("preferredContact")) as PreferredContact,
-        jerseyNumber: String(data.get("jerseyNumber") ?? ""),
         allergies: String(data.get("allergies") ?? ""),
         medicalConditions: String(data.get("medicalConditions") ?? ""),
         nationalIdNumber: String(data.get("nationalIdNumber") ?? ""),
@@ -168,7 +172,7 @@ export function PerformerRegistration() {
         <div className="intake-aside__copy">
           <span>PERFORMER REGISTRATION</span>
           <h1>ลงทะเบียน<br />นักแสดง</h1>
-          <p>สำหรับ Katakorn และ Cheerleader กรอกข้อมูลของคุณด้วยตนเอง แล้วส่งเอกสารยืนยันให้ครบภายในครั้งเดียว</p>
+          <p>สำหรับ Katakorn, Cheerleader และสมาชิกขบวนพาเหรด กรอกข้อมูลของคุณด้วยตนเอง แล้วส่งเอกสารยืนยันให้ครบภายในครั้งเดียว</p>
         </div>
         <div className="intake-aside__orb" />
       </aside>
@@ -191,11 +195,13 @@ export function PerformerRegistration() {
             <p>Choose your performer group and enter your own registration information. Fields marked * are required.</p>
             <form onSubmit={handleRegistration}>
               <div className="performer-choice" role="radiogroup" aria-label="Performer group">
-                <label><input type="radio" name="performerType" value="Katakorn" required /><span><Sparkles size={20} /><strong>Katakorn</strong><small>คทากร</small></span></label>
-                <label><input type="radio" name="performerType" value="Cheerleader" required /><span><Sparkles size={20} /><strong>Cheerleader</strong><small>เชียร์ลีดเดอร์</small></span></label>
+                <label><input type="radio" name="performerType" value="Katakorn" onChange={() => setPerformerType("Katakorn")} required /><span><Sparkles size={20} /><strong>Katakorn</strong><small>คทากร</small></span></label>
+                <label><input type="radio" name="performerType" value="Cheerleader" onChange={() => setPerformerType("Cheerleader")} required /><span><Sparkles size={20} /><strong>Cheerleader</strong><small>เชียร์ลีดเดอร์</small></span></label>
+                <label><input type="radio" name="performerType" value="Parade" onChange={() => setPerformerType("Parade")} required /><span><Sparkles size={20}/><strong>Parade</strong><small>สมาชิกขบวนพาเหรด</small></span></label>
               </div>
               <div className="form-grid">
-                <ParticipantInformationFields required/>
+                {performerType === "Parade" && <div className="field field--wide"><label htmlFor="parade-type">ประเภทสมาชิกขบวน / Parade member type *</label><select id="parade-type" name="category" className="select" required defaultValue=""><option value="" disabled>เลือกประเภท / Select type</option>{PARADE_TYPES.map(type => <option key={type}>{type}</option>)}</select></div>}
+                <ParticipantInformationFields required includeJersey={false}/>
                 <Field name="studentId" label="รหัสนักศึกษา / Student ID" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="6909680123" />
                 <div className="field"><label>คณะ / Faculty <span>*</span></label><select className="select registration-select" name="faculty" required defaultValue=""><option value="" disabled>เลือกคณะ / Select faculty</option><option value="คณะแพทยศาสตร์">คณะแพทยศาสตร์</option><option value="คณะศิลปศาสตร์">คณะศิลปศาสตร์</option><option value="วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์">วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์</option></select></div>
                 <Field name="fullNameThai" label="ชื่อ-สกุล (ไทย) / Thai full name" required placeholder="ชื่อ นามสกุล" />

@@ -5,3 +5,13 @@ export function participantKind(p: {participantKind?: ParticipantKind; performer
   return p.participantKind ?? "athlete";
 }
 export const kindLabel = {athlete: "Athlete", performer: "Performer", support: "Support team"};
+
+export const PARADE_TYPES = [
+  "ผู้เข้าร่วมขบวนการแสดง",
+  "คณะทํางานร่วมขบวน",
+  "ช่างภาพและผู้ติดตาม",
+  "พยานจับเวลา",
+  "พยานเสียง",
+  "คนพากย์",
+  "คนให้สัญญาณป้ายกํากับเวลา",
+] as const;

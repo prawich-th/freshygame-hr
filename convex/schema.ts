@@ -123,7 +123,7 @@ export default defineSchema({
     medicalConditions: v.optional(v.string()),
     nationalIdNumber: v.optional(v.string()),
     birthDate: v.optional(v.string()),
-    guardianPhone: v.optional(v.string()),
+    guardianPhone: v.optional(v.string()), emergencyContactName: v.optional(v.string()), emergencyContactRelationship: v.optional(v.string()),
     drugAllergies: v.optional(v.string()),
     foodAllergies: v.optional(v.string()),
     hospitalizationHistory: v.optional(v.string()),

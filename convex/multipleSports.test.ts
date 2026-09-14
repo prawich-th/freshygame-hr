@@ -1,11 +1,12 @@
 /// <reference types="vite/client" />
 import { expect, test, vi } from "vitest";
 import { convexTest } from "convex-test";
+import { PARADE_TYPES } from "../shared/participantKinds";
 import schema from "./schema";
 import { api } from "./_generated/api";
 const modules = import.meta.glob("./**/*.ts");
 const signature = [[{x: 20, y: 30}, {x: 80, y: 70}, {x: 150, y: 20}]];
-const personalInformation = {nationalIdNumber:"1234567890123", birthDate:"2007-03-15", guardianPhone:"0812345678", drugAllergies:"None", foodAllergies:"None", hospitalizationHistory:"None", sex:"Female"};
+const personalInformation = {nationalIdNumber:"1234567890123", birthDate:"2007-03-15", guardianPhone:"0812345678", emergencyContactName:"Parent Name", emergencyContactRelationship:"Mother", drugAllergies:"None", foodAllergies:"None", hospitalizationHistory:"None", sex:"Female"};
 const participant = {studentId:"6909680001", fullNameThai:"ทดสอบ", fullNameEnglish:"Test", faculty:"คณะแพทยศาสตร์", sport:"Volleyball", category:"Team", phone:"0812345678"};
 async function setup() {
   const t = convexTest(schema, modules);
@@ -195,4 +196,25 @@ test("performers sign after selecting documents; staff replacements require a fr
   const replacement = await uploadFiles(t);
   await staff.mutation(api.participants.completeStaffUpload, {participantId:session!.participantId,nationalIdImageId:replacement.nationalIdImageId});
   expect((await t.run(ctx => ctx.db.get("participants",session!.participantId)))?.signature).toBeUndefined();
+});
+
+
+test.each(PARADE_TYPES)("parade registration saves %s without a jersey and supports later profile completion", async category => {
+  const {t} = await setup();
+  const auditEventId = await t.mutation(api.publicIntake.recordVisit, {ipAddress:"test", purpose:"performer_registration"});
+  const args = {...personalInformation, studentId:participant.studentId, fullNameThai:participant.fullNameThai, fullNameEnglish:participant.fullNameEnglish, phone:participant.phone, auditEventId, performerType:"Parade" as const, category, sex:"Female" as const, faculty:"คณะแพทยศาสตร์" as const, email:"test@example.com", preferredContact:"Phone" as const, pdpaConsent:true as const, medicalConditions:"None"};
+  await expect(t.mutation(api.publicIntake.registerPerformer, {...args, category:"Invalid"})).rejects.toThrow("parade member type");
+  for (const key of ["emergencyContactName", "emergencyContactRelationship", "medicalConditions"] as const) {
+    await expect(t.mutation(api.publicIntake.registerPerformer, {...args, [key]:" "})).rejects.toThrow(key);
+  }
+  const {sessionId} = await t.mutation(api.publicIntake.registerPerformer, args);
+  const session = await t.run(ctx => ctx.db.get("uploadSessions", sessionId));
+  const saved = await t.run(ctx => ctx.db.get("participants", session!.participantId));
+  expect(saved).toMatchObject({participantKind:"performer", performerType:"Parade", category, emergencyContactName:personalInformation.emergencyContactName, emergencyContactRelationship:personalInformation.emergencyContactRelationship});
+  expect(saved?.jerseyNumber).toBeUndefined();
+  const visit = await t.mutation(api.publicIntake.recordVisit, {ipAddress:"test"});
+  const verified = await t.mutation(api.publicIntake.verifyIdentity, {auditEventId:visit, studentId:participant.studentId, phone:participant.phone});
+  expect(verified.requiresJersey).toBe(false);
+  await t.mutation(api.publicIntake.completeUpload, {sessionId:verified.sessionId, ...await uploadFiles(t), signature, confirmed:true, profile:verified.profile});
+  expect(await t.run(ctx => ctx.db.get("participants", session!.participantId))).toMatchObject({status:"pending", signature});
 });
