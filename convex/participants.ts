@@ -1,3 +1,4 @@
+import { resolveSport, resolveCategories } from "./sportCatalog";
 import { correctionFieldValidator } from "./correctionValidators";
 import { normalizeInformation } from "./participantInformation";
 import { participantCategories } from "../shared/participantCategories";
@@ -9,7 +10,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { requireAdmin, requireEditor, requireStaff, requireRecordsAccess } from "./access";
 import schema from "./schema";
 import { participantKind as resolveKind, SUPPORT_TYPES } from "../shared/participantKinds";
-import { findSport, normalizeSport } from "../shared/sports";
+import { normalizeSport } from "../shared/sports";
 
 const participantInput = v.object({
   participantKind: v.optional(
@@ -313,8 +314,8 @@ export const createParticipant = mutation({
     if ((faculty || !incomplete) && !["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(faculty)) throw new ConvexError("Choose a supported faculty");
     const participantKind = resolveKind(row);
     if (participantKind === "performer" && !row.performerType) throw new ConvexError("Choose a performer team");
-    const sportDefinition = findSport(row.sport);
-    const categories = participantCategories(row);
+    const sportDefinition = await resolveSport(ctx, row.sport);
+    const categories = resolveCategories(sportDefinition, participantCategories(row));
     const category = participantKind === "athlete" ? categories[0] : row.category?.trim();
     if (participantKind === "support" && !SUPPORT_TYPES.includes(category ?? "")) throw new ConvexError("Choose Camera or Support team");
     if (participantKind === "athlete" && (!sportDefinition || !categories.length || categories.some(value => !sportDefinition.types.includes(value)))) throw new ConvexError("Choose a sport and event type");
@@ -366,16 +367,17 @@ export const importBatch = mutation({
         throw new ConvexError(`Student ID ${studentId} has an unsupported faculty`);
       }
       if (resolveKind(row) === "support" && !SUPPORT_TYPES.includes(row.category?.trim() ?? "")) throw new ConvexError(`Student ID ${studentId}: Choose Camera or Support team`);
-      const activity = resolveKind(row) === "support" ? "Support team" : row.performerType ?? normalizeSport(row.sport);
+      const sportDefinition = await resolveSport(ctx, row.sport);
+      const activity = resolveKind(row) === "support" ? "Support team" : row.performerType ?? sportDefinition?.name ?? normalizeSport(row.sport);
       const existing = await ctx.db.query("participants").withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", activity)).unique();
       const { email: rawEmail, phone: rawPhone, ...participantFields } = row;
       const phone = normalizePhone(rawPhone, studentId);
       const email = rawEmail?.trim().toLowerCase() || undefined;
-      const categories = participantCategories({ categories: [...(existing && resolveKind(existing) === "athlete" ? participantCategories(existing) : []), ...participantCategories(row)] });
+      const categories = participantCategories({ categories: [...(existing && resolveKind(existing) === "athlete" ? participantCategories(existing) : []), ...resolveCategories(sportDefinition, participantCategories(row))] });
       const data = {
         ...participantFields,
         ...(resolveKind(row) === "athlete" ? { categories, category: categories[0] } : { categories: undefined }),
-        sport: resolveKind(row) === "support" ? "Support team" : row.performerType ?? normalizeSport(row.sport),
+        sport: resolveKind(row) === "support" ? "Support team" : row.performerType ?? sportDefinition?.name ?? normalizeSport(row.sport),
         performerType: resolveKind(row) === "support" ? undefined : row.performerType,
         faculty,
         participantKind: resolveKind(row) === "support" ? "support" as const : row.performerType ? "performer" as const : "athlete" as const,
@@ -481,7 +483,8 @@ export const updateParticipant = mutation({
     const fullNameThai = args.fullNameThai.trim();
     const fullNameEnglish = args.fullNameEnglish.trim();
     const faculty = args.faculty.trim();
-    const sport = normalizeSport(args.sport);
+    const definition = await resolveSport(ctx, args.sport);
+    const sport = definition?.name ?? normalizeSport(args.sport);
     if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
     if (!fullNameThai || !fullNameEnglish || !faculty || !sport) {
       throw new ConvexError("Student ID, names, faculty, and activity are required");
@@ -492,9 +495,8 @@ export const updateParticipant = mutation({
 
     if (args.participantKind === "support" && !SUPPORT_TYPES.includes(args.category?.trim() ?? "")) throw new ConvexError("Choose Camera or Support team");
 
-    const categories = participantCategories(args);
+    const categories = resolveCategories(definition, participantCategories(args));
     if (args.participantKind === "athlete") {
-      const definition = findSport(sport);
       const existingCategories = resolveKind(participant) === "athlete" && normalizeSport(participant.sport) === sport ? participantCategories(participant) : [];
       if (!categories.length || categories.some(value => !definition?.types.includes(value) && !existingCategories.includes(value))) {
         throw new ConvexError("Choose a sport and event type");

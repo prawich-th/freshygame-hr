@@ -17,6 +17,17 @@ const status = v.union(
 );
 
 export default defineSchema({
+  sportMigrations: defineTable({
+    sportCode: v.string(), kind: v.union(v.literal("sport"), v.literal("category")),
+    oldValue: v.string(), newValue: v.string(), affected: v.number(),
+    createdAt: v.number(), createdBy: v.id("users"),
+  }).index("by_sportCode", ["sportCode"]),
+
+  sportCatalog: defineTable({
+    code: v.string(), name: v.string(), thai: v.string(), aliases: v.array(v.string()),
+    events: v.array(v.object({ name: v.string(), aliases: v.array(v.string()) })),
+  }).index("by_code", ["code"]),
+
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

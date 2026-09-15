@@ -19,6 +19,7 @@ import type * as participantInformation from "../participantInformation.js";
 import type * as participants from "../participants.js";
 import type * as publicIntake from "../publicIntake.js";
 import type * as signatures from "../signatures.js";
+import type * as sportCatalog from "../sportCatalog.js";
 
 import type {
   ApiFromModules,
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   participants: typeof participants;
   publicIntake: typeof publicIntake;
   signatures: typeof signatures;
+  sportCatalog: typeof sportCatalog;
 }>;
 
 /**

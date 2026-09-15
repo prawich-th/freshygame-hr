@@ -19,7 +19,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, type InputHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
 import { participantKind, kindLabel, SUPPORT_TYPES, PARADE_TYPES, type ParticipantKind } from "@/shared/participantKinds";
-import { SPORTS, findSport, normalizeSport } from "@/shared/sports";
+import { normalizeSport } from "@/shared/sports";
+import { SportCatalog, useSportCatalog } from "./SportCatalog";
 import { ParticipantSelection } from "./ParticipantSelection";
 import { Brand } from "./Brand";
 import { generateParticipantPdf } from "../lib/participantPdf";
@@ -27,7 +28,7 @@ import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
 import { ContactDirectory } from "./ContactDirectory";
 
-type Tab = "participants" | "import" | "staff" | "audit";
+type Tab = "sports" | "participants" | "import" | "staff" | "audit";
 const statusLabel = { incomplete: "Incomplete", pending: "Pending review", verified: "Verified", rejected: "Needs correction" };
 const statusClass = { incomplete: "pill--gray", pending: "pill--amber", verified: "pill--green", rejected: "pill--red" };
 
@@ -110,11 +111,12 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
     { id: "participants" as const, label: "Participants", icon: UsersRound },
     { id: "import" as const, label: "Import data", icon: FolderUp },
     ...(current.role === "admin" ? [
+      { id: "sports" as const, label: "Sports & categories", icon: Activity },
       { id: "staff" as const, label: "Staff & access", icon: UserCog },
       { id: "audit" as const, label: "Audit log", icon: ScrollText },
     ] : []),
   ];
-  const title = selectionPage ? "Participant selection by sport" : tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "staff" ? "Staff access control" : "Security audit log";
+  const title = selectionPage ? "Participant selection by sport" : tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "sports" ? "Sports & categories" : tab === "staff" ? "Staff access control" : "Security audit log";
 
   return <main className="staff-shell">
     <aside ref={sidebar} id="staff-sidebar" className={`sidebar ${menuOpen ? "sidebar--open" : ""}`} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? true : undefined} aria-label="Staff navigation" onKeyDown={event => {
@@ -137,6 +139,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
       {selectionPage && (current.role === "admin" ? <ParticipantSelection /> : <div className="notice notice--error">Only administrators can manage participant selection.</div>)}
       {creating && current.role !== "viewer" && <CreateParticipantDrawer onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setSelectedId(id); }} />}
       {tab === "import" && <ImportPanel />}
+      {!selectionPage && tab === "sports" && current.role === "admin" && <SportCatalog />}
       {tab === "staff" && current.role === "admin" && <StaffPanel />}
       {tab === "audit" && current.role === "admin" && <AuditPanel />}
     </section>
@@ -262,14 +265,17 @@ function ParticipantFields({p, editKind, setEditKind, incomplete = false}: {inco
 }
 
 function SportFields({sport = "", categories = []}: {sport?: string; categories?: string[]}) {
+  const sports = useSportCatalog();
   const [selected, setSelected] = useState(normalizeSport(sport));
   const [types, setTypes] = useState(categories);
-  const definition = findSport(selected);
-  const options = [...new Set([...(definition?.types ?? []), ...(selected === normalizeSport(sport) ? categories : [])])];
+  const definition = sports?.find(s => s.name === selected || s.aliases.includes(selected));
+  const canonicalType = (value: string) => definition?.events.find(e => e.name === value || e.aliases.includes(value))?.name ?? value;
+  const selectedTypes = [...new Set(types.map(canonicalType))];
+  const options = [...new Set([...(definition?.types ?? []), ...(selected === normalizeSport(sport) || definition?.aliases.includes(sport) ? categories.map(canonicalType) : [])])];
   return <>
-    <div className="field"><label htmlFor="participant-sport">Sport <span>*</span></label><select id="participant-sport" className="select" name="sport" required value={selected} onChange={e => { const next = findSport(e.target.value); setSelected(e.target.value); setTypes(next?.types.length === 1 ? next.types : []); }}><option value="" disabled>Select sport</option>{selected && !definition && <option value={selected}>{selected} (existing)</option>}{SPORTS.map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}</select></div>
+    <div className="field"><label htmlFor="participant-sport">Sport <span>*</span></label><select id="participant-sport" className="select" name="sport" required value={definition?.name ?? selected} onChange={e => { const next = sports?.find(s => s.name === e.target.value); setSelected(e.target.value); setTypes(next?.types.length === 1 ? next.types : []); }}><option value="" disabled>Select sport</option>{selected && !definition && <option value={selected}>{selected} (existing)</option>}{(sports ?? []).map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}</select></div>
     <fieldset className="category-options field field--wide"><legend>Categories / types <span>*</span></legend><small>Select all events this person participates in.</small>
-      {options.map((type, index) => <label key={type}><input type="checkbox" name="categories" value={type} checked={types.includes(type)} required={types.length === 0 && index === 0} onChange={e => setTypes(current => e.target.checked ? [...current, type] : current.filter(value => value !== type))}/>{type}{!definition?.types.includes(type) && " (existing)"}</label>)}
+      {options.map((type, index) => <label key={type}><input type="checkbox" name="categories" value={type} checked={selectedTypes.includes(type)} required={selectedTypes.length === 0 && index === 0} onChange={e => setTypes(e.target.checked ? [...selectedTypes, type] : selectedTypes.filter(value => value !== type))}/>{type}{!definition?.types.includes(type) && " (existing)"}</label>)}
       {!options.length && <small>Choose a sport to see its events.</small>}
       {(selected === "Taekwondo" || selected === "Amateur Boxing") && <small>Weight classes are assigned separately; CSV Type may include the weight class.</small>}
     </fieldset>
@@ -309,6 +315,7 @@ function DocumentPreview({label,url}:{label:string;url:string|null}) { return <d
 function FileField({label,onFile}:{label:string;onFile:(file:File|undefined)=>void}) { return <div className="field"><label>{label}</label><input className="input" style={{paddingTop:10}} type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>onFile(e.target.files?.[0])}/></div>; }
 
 function ImportPanel() {
+  const sports = useSportCatalog();
   const importBatch = useMutation(api.participants.importBatch); const [busy,setBusy]=useState(false); const [result,setResult]=useState("");
   async function handleFile(file?: File) {
     if (!file) return;
@@ -336,7 +343,7 @@ function ImportPanel() {
     } finally { setBusy(false); }
   }
 
-  return <section className="content-card"><h2>Bring in your participant list</h2><p>Upload the CSV file. Registrations are matched by Student ID and sport/activity. Use a separate row for each sport; the same Student ID can appear in multiple sports.</p><a className="button button--soft" href="/templates/participants.csv" download="Freshy-Game-Participant-Template.csv"><Download size={15}/> Download CSV template</a><p>Replace the example rows with your participants and keep the column headers. Use the sport codes and types listed below, then save as UTF-8 CSV.</p><div className="drop-csv"><input id="csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e=>void handleFile(e.target.files?.[0])}/><label htmlFor="csv">{busy?<span className="spinner" style={{color:"#4b2f25"}}/>:<FileSpreadsheet size={33}/>}<strong>{busy?"Importing participants…":"Choose a CSV file"}</strong><span>UTF-8 CSV · Up to 100 rows processed per secure batch</span></label></div>{result&&<div className={`notice import-result ${result.startsWith("Imported")?"notice--success":"notice--error"}`}>{result}</div>}<div className="notice notice--info" style={{marginTop:16}}>Columns: <strong>Student ID, Name, Nickname, ชื่อ-สกุล, ชื่อเล่น, Sex, Faculty, Sport Code (or Sport), Type, Phone number, Email, Instagram, LINE ID, Preferred contact method</strong>. Use <strong>Parade</strong> (or <strong>ขบวนพาเหรด</strong>) in Sport or Type for normal parade members; they are classified as performers automatically. For support members, use <strong>Support team</strong> in Sport Code (or Sport) and <strong>Camera</strong> or <strong>Support team</strong> in Type. Phone numbers are cleaned to 10 digits beginning with 0; email whitespace is trimmed. Instagram, LINE ID, and Preferred contact method are optional. Instagram handles can include @; preferred methods can be LINE, Instagram, Phone, or Email.</div><h3 style={{marginTop:24}}>Sport codes for CSV imports</h3><p>Use a code or sport name. Type accepts an event name or a specific weight class. For multiple categories, use separate rows with the same Student ID and sport, or separate types with a semicolon (;). Imports add categories; use the participant editor to remove them.</p><table className="staff-list"><thead><tr><th>Code</th><th>Sport</th><th>Types</th></tr></thead><tbody>{SPORTS.map(s => <tr key={s.code}><td><strong>{s.code}</strong></td><td>{s.thai} / {s.name}</td><td>{s.types.join(" / ")}</td></tr>)}</tbody></table></section>;
+  return <section className="content-card"><h2>Bring in your participant list</h2><p>Upload the CSV file. Registrations are matched by Student ID and sport/activity. Use a separate row for each sport; the same Student ID can appear in multiple sports.</p><a className="button button--soft" href="/templates/participants.csv" download="Freshy-Game-Participant-Template.csv"><Download size={15}/> Download CSV template</a><p>Replace the example rows with your participants and keep the column headers. Use the sport codes and types listed below, then save as UTF-8 CSV.</p><div className="drop-csv"><input id="csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e=>void handleFile(e.target.files?.[0])}/><label htmlFor="csv">{busy?<span className="spinner" style={{color:"#4b2f25"}}/>:<FileSpreadsheet size={33}/>}<strong>{busy?"Importing participants…":"Choose a CSV file"}</strong><span>UTF-8 CSV · Up to 100 rows processed per secure batch</span></label></div>{result&&<div className={`notice import-result ${result.startsWith("Imported")?"notice--success":"notice--error"}`}>{result}</div>}<div className="notice notice--info" style={{marginTop:16}}>Columns: <strong>Student ID, Name, Nickname, ชื่อ-สกุล, ชื่อเล่น, Sex, Faculty, Sport Code (or Sport), Type, Phone number, Email, Instagram, LINE ID, Preferred contact method</strong>. Use <strong>Parade</strong> (or <strong>ขบวนพาเหรด</strong>) in Sport or Type for normal parade members; they are classified as performers automatically. For support members, use <strong>Support team</strong> in Sport Code (or Sport) and <strong>Camera</strong> or <strong>Support team</strong> in Type. Phone numbers are cleaned to 10 digits beginning with 0; email whitespace is trimmed. Instagram, LINE ID, and Preferred contact method are optional. Instagram handles can include @; preferred methods can be LINE, Instagram, Phone, or Email.</div><h3 style={{marginTop:24}}>Sport codes for CSV imports</h3><p>Use a code or sport name. Type accepts an event name or a specific weight class. For multiple categories, use separate rows with the same Student ID and sport, or separate types with a semicolon (;). Imports add categories; use the participant editor to remove them.</p><table className="staff-list"><thead><tr><th>Code</th><th>Sport</th><th>Types</th></tr></thead><tbody>{(sports ?? []).map(s => <tr key={s.code}><td><strong>{s.code}</strong></td><td>{s.thai} / {s.name}</td><td>{s.types.join(" / ")}</td></tr>)}</tbody></table></section>;
 }
 
 function StaffPanel() {

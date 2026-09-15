@@ -684,3 +684,14 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
   .record-actions > div { width: 100%; }
   .record-actions .button { flex: 1; white-space: normal; }
 }
+
+.sport-catalog {
+  max-width: 960px;
+  > .field { margin: 24px 0; }
+  h3 { margin-top: 32px; }
+  &__fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+  &__fields > button { margin-top: 18px; }
+  &__event { display: flex; gap: 12px; align-items: flex-end; margin-top: 16px; }
+  &__event .field { flex: 1; min-width: 0; }
+  @media (max-width: 600px) { &__event { align-items: stretch; flex-direction: column; } }
+}

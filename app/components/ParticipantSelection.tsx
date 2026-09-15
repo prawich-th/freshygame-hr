@@ -1,6 +1,6 @@
 "use client";
 
-import { SPORTS } from "@/shared/sports";
+import { useSportCatalog } from "./SportCatalog";
 import Link from "next/link";
 import { useState } from "react";
 import { useConvex, useMutation, useQuery } from "convex/react";
@@ -11,6 +11,7 @@ import { errorMessage } from "../lib/errors";
 type Candidate = {id: Id<"participants">; studentId: string; name: string; thaiName: string; sport: string};
 
 export function ParticipantSelection() {
+  const sports = useSportCatalog();
   const [sport, setSport] = useState("");
   const convex = useConvex();
   const remove = useMutation(api.participants.keepOnlySelected);
@@ -55,7 +56,7 @@ export function ParticipantSelection() {
   }
   return <section className="content-card" style={{marginBottom:16}}>
     <Link href="/staff" className="button button--ghost">← Back to participants</Link>
-    <div className="field" style={{margin:"16px 0"}}><label htmlFor="selection-sport">Sport / activity</label><select id="selection-sport" className="select" value={sport} disabled={busy || active} onChange={e => {setSport(e.target.value);setRows(null);setKeep(new Set());setError("");}}><option value="">Choose a sport or activity</option>{SPORTS.map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}{["Katakorn", "Cheerleader", "Parade", "Support team"].map(value => <option key={value}>{value}</option>)}</select></div>
+    <div className="field" style={{margin:"16px 0"}}><label htmlFor="selection-sport">Sport / activity</label><select id="selection-sport" className="select" value={sport} disabled={busy || active} onChange={e => {setSport(e.target.value);setRows(null);setKeep(new Set());setError("");}}><option value="">Choose a sport or activity</option>{(sports ?? []).map(s => <option key={s.code} value={s.name}>{s.thai} / {s.name}</option>)}{["Katakorn", "Cheerleader", "Parade", "Support team"].map(value => <option key={value}>{value}</option>)}</select></div>
     <button className="button button--soft" disabled={!sport || busy || active || job === undefined} onClick={() => void open()}>{busy && !rows ? "Loading…" : `Load ${sport || "sport"} participants`}</button>
     {job && <div className={`notice ${job.status === "complete" ? "notice--success" : "notice--info"}`} role="status" style={{marginTop:12}}>
       {job.status === "complete" ? `${job.sport ?? "Previous removal"}: ${job.removeCount - job.skippedCount} participants removed; ${job.keepCount} selected participants kept.${job.skippedCount ? ` ${job.skippedCount} participants moved to another sport and were left untouched.` : ""}` : `${job.sport ?? "Previous removal"}: ${job.processed} of ${job.removeCount} removals completed. ${job.status === "paused" ? "The last batch could not finish. Resume to retry the remaining records." : "Removal continues if you leave this page."}`}
