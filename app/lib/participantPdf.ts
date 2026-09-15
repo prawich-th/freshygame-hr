@@ -10,7 +10,7 @@ export type ParticipantPdfEntry = {
   studentIdImageUrl: string | null;
 };
 
-type FontData = { regular: string; bold: string };
+export type FontData = { regular: string; bold: string };
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
@@ -21,7 +21,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
-async function loadFonts(supplied?: FontData): Promise<FontData> {
+export async function loadFonts(supplied?: FontData): Promise<FontData> {
   if (supplied) return supplied;
   const [regular, bold] = await Promise.all([
     fetch("/fonts/THSarabunNew.ttf").then((response) => {
@@ -36,7 +36,7 @@ async function loadFonts(supplied?: FontData): Promise<FontData> {
   return { regular: arrayBufferToBase64(regular), bold: arrayBufferToBase64(bold) };
 }
 
-async function imageData(url: string | null) {
+export async function imageData(url: string | null) {
   if (!url) return null;
   try {
     const response = await fetch(url);
@@ -71,7 +71,43 @@ async function imageData(url: string | null) {
   }
 }
 
-export async function generateParticipantPdf(
+export type ParticipantPdfOptions = {
+  fonts?: FontData;
+  save?: boolean;
+  includeSportSheets?: boolean;
+  template?: Uint8Array;
+};
+
+export async function generateParticipantPdf(entries: ParticipantPdfEntry[], filename: string, options?: ParticipantPdfOptions) {
+  if (!entries.length) throw new Error("No participants to export.");
+  const athletes = entries.filter(entry => participantKind(entry.participant) === "athlete");
+  if (!athletes.length) return generateLegacyParticipantPdf(entries, filename, options);
+  const { generateAthletePdf } = await import("./athletePdf");
+  const { PDFDocument } = await import("pdf-lib");
+  const bytes = await generateAthletePdf(athletes, options);
+  const others = entries.filter(entry => participantKind(entry.participant) !== "athlete");
+  let result = bytes;
+  if (others.length) {
+    const document = await PDFDocument.load(bytes);
+    const other = await PDFDocument.load(await generateLegacyParticipantPdf(others, filename, { ...options, save: false }));
+    for (const page of await document.copyPages(other, other.getPageIndices())) document.addPage(page);
+    result = await document.save();
+  }
+  const buffer = new Uint8Array(result).buffer;
+  if (options?.save !== false) {
+    const url = URL.createObjectURL(new Blob([buffer], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${filename.replace(/[^a-zA-Z0-9ก-๙_-]+/g, "-")}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+  return buffer;
+}
+
+async function generateLegacyParticipantPdf(
   entries: ParticipantPdfEntry[],
   filename: string,
   options?: { fonts?: FontData; save?: boolean },
@@ -220,7 +256,7 @@ function cell(pdf: Pdf, value: string, x: number, y: number, width: number, heig
   textBox(pdf, value, x, y, width, height, size);
 }
 
-function drawSignature(pdf: Pdf, participant: Doc<"participants">, x: number, y: number, width: number, height = width * 0.3) {
+export function drawSignature(pdf: Pdf, participant: Doc<"participants">, x: number, y: number, width: number, height = width * 0.3) {
   const points = participant.signature?.flat() ?? [];
   if (points.length < 2) return;
   // Center the actual ink, rather than the blank margins of the capture canvas.

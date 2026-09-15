@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Doc } from "../convex/_generated/dataModel";
 import { generateParticipantPdf } from "../app/lib/participantPdf";
@@ -23,6 +23,8 @@ const participant = {
   nationalIdNumber: "1234567890123",
   birthDate: "2007-03-15",
   guardianPhone: "0812345678",
+  emergencyContactName: "สมชาย กุลวัฒน์",
+  emergencyContactRelationship: "บิดา",
   jerseyNumber: "92",
   drugAllergies: "แพ้ยาเพนิซิลลิน มีผื่นและบวม",
   foodAllergies: "แพ้ถั่วลิสง",
@@ -41,16 +43,22 @@ const participant = {
   updatedAt: Date.now(),
 } as unknown as Doc<"participants">;
 
-const sampleCard = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="630"><rect width="1000" height="630" rx="24" fill="#f3ece1"/><rect width="1000" height="100" fill="#573c2e"/><text x="45" y="66" font-family="sans-serif" font-size="35" fill="white">TU FRESHY GAMES 2026</text><rect x="45" y="155" width="245" height="330" rx="12" fill="#d8c9b5"/><circle cx="168" cy="262" r="55" fill="#95785f"/><path d="M75 435 Q168 295 260 435" fill="#95785f"/><text x="340" y="220" font-family="sans-serif" font-size="30" fill="#573c2e">SAMPLE DOCUMENT</text><text x="340" y="295" font-family="sans-serif" font-size="25">Name: Sample Participant</text><text x="340" y="345" font-family="sans-serif" font-size="25">Student ID: 6709680123</text><text x="340" y="395" font-family="sans-serif" font-size="25">For layout preview only</text><text x="45" y="560" font-family="sans-serif" font-size="24" fill="#573c2e">FICTIONAL EXAMPLE - NOT AN IDENTITY DOCUMENT</text></svg>`;
-const sampleImage = `data:image/png;base64,${(await sharp(Buffer.from(sampleCard)).png().toBuffer()).toString("base64")}`;
+const samplePortrait = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="360"><rect width="300" height="360" fill="#eae4dc"/><circle cx="150" cy="118" r="64" fill="#b7977d"/><path d="M42 360 L42 305 Q48 212 150 212 Q252 212 258 305 L258 360" fill="#573c2e"/><text x="150" y="325" text-anchor="middle" font-family="sans-serif" font-size="18" fill="white">SAMPLE PROFILE</text></svg>`;
+const sampleImage = `data:image/png;base64,${(await sharp(Buffer.from(samplePortrait)).png().toBuffer()).toString("base64")}`;
+
+const sampleCard = `<svg xmlns="http://www.w3.org/2000/svg" width="856" height="540"><rect width="856" height="540" rx="20" fill="#ede7df"/><rect width="856" height="85" fill="#573c2e"/><text x="35" y="54" font-family="sans-serif" font-size="27" fill="white">SAMPLE STUDENT ID</text><rect x="35" y="120" width="200" height="260" fill="#d1c0af"/><circle cx="135" cy="205" r="48" fill="#ab896c"/><path d="M50 360 Q135 230 220 360" fill="#573c2e"/><text x="280" y="195" font-family="sans-serif" font-size="26">Waranya Kunlawat</text><text x="280" y="250" font-family="sans-serif" font-size="24">6709680123</text><text x="35" y="480" font-family="sans-serif" font-size="22">SYNTHETIC SAMPLE - FOR LAYOUT REVIEW</text></svg>`;
+const studentIdImage = `data:image/png;base64,${(await sharp(Buffer.from(sampleCard)).png().toBuffer()).toString("base64")}`;
 
 const bytes = await generateParticipantPdf(
-  [{ participant, photoUrl: null, nationalIdImageUrl: sampleImage, studentIdImageUrl: sampleImage }],
+  [{ participant, photoUrl: sampleImage, nationalIdImageUrl: null, studentIdImageUrl: studentIdImage }],
   "freshy-game-participant-sample",
   {
     fonts: { regular: regular.toString("base64"), bold: bold.toString("base64") },
     save: false,
+    includeSportSheets: true,
+    template: await readFile(resolve(projectRoot, "public/templates/athlete-official.pdf")),
   },
 );
 
-await writeFile(resolve(projectRoot, "output/pdf/freshy-game-participant-sample.pdf"), Buffer.from(bytes));
+await mkdir(resolve(projectRoot, "output/pdf"), { recursive: true });
+await writeFile(resolve(projectRoot, "output/pdf/freshy-game-athlete-official-sample.pdf"), Buffer.from(bytes));
