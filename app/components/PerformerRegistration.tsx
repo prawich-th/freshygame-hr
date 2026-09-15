@@ -1,5 +1,7 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
+
+import { DocumentUploadFields, useDocumentFiles } from "./DocumentUploadFields";
+import { ProfilePhotoGuide } from "./ProfilePhotoGuide";
 
 import { PARADE_TYPES } from "@/shared/participantKinds";
 import { SignaturePad } from "./SignaturePad";
@@ -12,7 +14,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
-  Camera,
   Check,
   ShieldCheck,
   Sparkles,
@@ -30,6 +31,7 @@ type PreferredContact = "Phone" | "LINE" | "Instagram" | "Email";
 type Faculty = "คณะแพทยศาสตร์" | "คณะศิลปศาสตร์" | "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์";
 type Registration = {
   sessionId: Id<"uploadSessions">;
+  profilePhotoUrl: string | null;
   name: string;
   performerType: PerformerType;
 };
@@ -43,14 +45,10 @@ export function PerformerRegistration() {
   const [step, setStep] = useState(1);
   const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
   const [registration, setRegistration] = useState<Registration | null>(null);
-  const [files, setFiles] = useState<{
-    profile: File | null;
-    nationalId: File | null;
-    studentId: File | null;
-  }>({ profile: null, nationalId: null, studentId: null });
-  const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const documents = useDocumentFiles(setError);
+  const { files } = documents;
 
   useEffect(() => {
     fetch("/api/client-context", {
@@ -62,10 +60,6 @@ export function PerformerRegistration() {
       .then((data) => setAuditId(data.auditEventId))
       .catch(() => setError("ไม่สามารถเริ่มเซสชันได้ กรุณาลองอีกครั้ง / Could not start a secure session."));
   }, []);
-
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
 
   async function handleRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -111,18 +105,6 @@ export function PerformerRegistration() {
     } finally {
       setBusy(false);
     }
-  }
-
-  function chooseFile(kind: "profile" | "nationalId" | "studentId", nextFile?: File) {
-    if (!nextFile) return;
-    if (!nextFile.type.startsWith("image/") || nextFile.size > 25 * 1024 * 1024) {
-      setError("Please choose a JPG, PNG, or WebP image under 25 MB");
-      return;
-    }
-    if (kind === "profile" && preview) URL.revokeObjectURL(preview);
-    setFiles((current) => ({ ...current, [kind]: nextFile }));
-    if (kind === "profile") setPreview(URL.createObjectURL(nextFile));
-    setError("");
   }
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
@@ -226,11 +208,8 @@ export function PerformerRegistration() {
             <p>Upload a profile photo, national ID card, and student ID card. Both ID copies will appear in the PDF with a signed certification.</p>
             <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20} /></span><div><strong>{registration.name}</strong><span>Performer · {registration.performerType}</span></div></div>
             <form onSubmit={handleUpload}>
-              <div className="document-upload-grid">
-                <div className="upload-drop"><input id="performer-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("profile", event.target.files?.[0])} /><label htmlFor="performer-photo">{preview ? <img className="photo-preview" src={preview} alt="Profile preview" /> : <Camera size={28} />}<strong>รูปโปรไฟล์</strong><span>Profile photo</span></label></div>
-                <div className={`upload-drop ${files.nationalId ? "upload-drop--ready" : ""}`}><input id="performer-national-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("nationalId", event.target.files?.[0])} /><label htmlFor="performer-national-card">{files.nationalId ? <Check size={28} /> : <UploadCloud size={28} />}<strong>บัตรประชาชน</strong><span>{files.nationalId?.name ?? "National ID card image"}</span></label></div>
-                <div className={`upload-drop ${files.studentId ? "upload-drop--ready" : ""}`}><input id="performer-student-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("studentId", event.target.files?.[0])} /><label htmlFor="performer-student-card">{files.studentId ? <Check size={28} /> : <UploadCloud size={28} />}<strong>บัตรนักศึกษา</strong><span>{files.studentId?.name ?? "Student ID card image"}</span></label></div>
-              </div>
+              <ProfilePhotoGuide />
+              <DocumentUploadFields {...documents} existingPhotoUrl={registration.profilePhotoUrl} disabled={busy} />
               <SignaturePad disabled={busy} onChange={setSignature}/>
               {error && <div className="notice notice--error">{error}</div>}
               <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner" /> : <><UploadCloud size={17} /> ส่งใบสมัคร</>}</button>

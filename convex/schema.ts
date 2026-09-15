@@ -1,3 +1,4 @@
+import { correctionValidator } from "./correctionValidators";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -89,6 +90,7 @@ export default defineSchema({
   }).index("by_status", ["status"]),
 
   participants: defineTable({
+    correctionRequests: v.optional(v.array(correctionValidator)),
     participantKind: v.optional(
       v.union(v.literal("athlete"), v.literal("performer"), v.literal("support")),
     ),

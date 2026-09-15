@@ -1,4 +1,6 @@
 "use client";
+
+import { ProfilePhotoGuide } from "./ProfilePhotoGuide";
 /* eslint-disable @next/next/no-img-element */
 
 import { errorMessage, UserFacingError } from "../lib/errors";
@@ -40,7 +42,7 @@ const documentDetails: Array<{
   capture: "user" | "environment";
   portrait?: boolean;
 }> = [
-  { kind: "profile", title: "Profile photo", thai: "รูปโปรไฟล์", hint: "Face centered, plain background", capture: "user", portrait: true },
+  { kind: "profile", title: "Profile photo", thai: "รูปโปรไฟล์", hint: "Student uniform, face forward, plain background", capture: "user", portrait: true },
   { kind: "nationalId", title: "National ID card", thai: "บัตรประชาชน", hint: "Capture the full front of the card", capture: "environment" },
   { kind: "studentId", title: "Student ID card", thai: "บัตรนักศึกษา", hint: "Make the name and ID readable", capture: "environment" },
 ];
@@ -256,11 +258,13 @@ function BoothWorkspace() {
       <div className="booth-progress"><span style={{ width: `${(readyCount / 3) * 100}%` }} /></div>
 
       <form onSubmit={upload}>
+        <ProfilePhotoGuide />
         <div className="booth-document-list">
           {documentDetails.map((document) => <DocumentCapture
             key={document.kind}
             {...document}
             existing={existing[document.kind]}
+            existingUrl={document.kind === "profile" ? detail.photoUrl : document.kind === "nationalId" ? detail.nationalIdImageUrl : detail.studentIdImageUrl}
             preview={previews[document.kind]}
             disabled={busy}
             onFile={(file) => selectFile(document.kind, file)}
@@ -287,7 +291,7 @@ function BoothWorkspace() {
   </main>;
 }
 
-function DocumentCapture({ title, thai, hint, capture, portrait, existing, preview, disabled, onFile, onRemove }: {
+function DocumentCapture({ title, thai, hint, capture, portrait, existing, existingUrl, preview, disabled, onFile, onRemove }: {
   kind: DocumentKind;
   title: string;
   thai: string;
@@ -295,6 +299,7 @@ function DocumentCapture({ title, thai, hint, capture, portrait, existing, previ
   capture: "user" | "environment";
   portrait?: boolean;
   existing: boolean;
+  existingUrl?: string | null;
   preview?: string;
   disabled: boolean;
   onFile: (file?: File) => void;
@@ -303,7 +308,7 @@ function DocumentCapture({ title, thai, hint, capture, portrait, existing, previ
   const inputId = `booth-${title.toLowerCase().replaceAll(" ", "-")}`;
   return <article className={`booth-document ${preview ? "has-preview" : ""}`}>
     <div className={`booth-document__visual ${portrait ? "is-portrait" : ""}`}>
-      {preview ? <img src={preview} alt={`${title} preview`} /> : portrait ? <UserRound size={25} /> : <FileCheck2 size={25} />}
+      {(preview || existingUrl) ? <img src={preview || existingUrl!} alt={preview ? `${title} preview` : `Current ${title}`} /> : portrait ? <UserRound size={25} /> : <FileCheck2 size={25} />}
       {preview && <button type="button" onClick={onRemove} aria-label={`Remove ${title}`}><X size={14} /></button>}
     </div>
     <div className="booth-document__copy"><strong>{title}</strong><span>{thai}</span><small>{preview ? "New image ready" : existing ? "Already on file · replace if needed" : hint}</small></div>

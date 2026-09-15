@@ -1,3 +1,4 @@
+import { correctionFieldValidator } from "./correctionValidators";
 import { normalizeInformation } from "./participantInformation";
 import { participantCategories } from "../shared/participantCategories";
 import { completeDocuments, existingDocuments, linkDocuments } from "./participantDocuments";
@@ -412,6 +413,7 @@ export const updateStatus = mutation({
     if (!participant) throw new ConvexError("Participant not found");
     await ctx.db.patch("participants", args.participantId, {
       status: args.status,
+      ...(args.status === "verified" ? { correctionRequests: [] } : {}),
       updatedAt: Date.now(),
       updatedBy: staff.userId,
     });
@@ -778,6 +780,33 @@ export const removalBatch = internalMutation({
     await ctx.db.patch("participantRemovalJobs", jobId, {nextIndex, skippedCount, status: complete ? "complete" : "running", ...(complete ? {participantIds: []} : {})});
     if (complete) await ctx.db.insert("auditEvents", {action: `participant_removal_completed_${job.removeCount - skippedCount}`, ipAddress: "authenticated-staff-session", staffUserId: job.createdBy, successful: true, attempts: 1, createdAt: Date.now()});
     else await ctx.scheduler.runAfter(0, internal.participants.runRemoval, {jobId});
+    return null;
+  },
+});
+
+// Correction requests stay attached to the reviewing registration. Intake merges
+// requests across the student's registrations because their documents are shared.
+export const setFieldCorrection = mutation({
+  args: { participantId: v.id("participants"), field: correctionFieldValidator, note: v.string(), requested: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const staff = await requireEditor(ctx);
+    const participant = await ctx.db.get("participants", args.participantId);
+    if (!participant) throw new ConvexError("Participant not found");
+    if (args.note.length > 500) throw new ConvexError("Correction notes must be at most 500 characters");
+    if (args.field === "jerseyNumber" && resolveKind(participant) === "performer") throw new ConvexError("Performers do not require a jersey number");
+    const requests = (participant.correctionRequests ?? []).filter(request => request.field !== args.field);
+    if (args.requested) requests.push({ field: args.field, note: args.note.trim(), status: "requested" });
+    await ctx.db.patch("participants", participant._id, {
+      correctionRequests: requests,
+      ...(args.requested ? { status: "rejected" as const } : {}),
+      updatedAt: Date.now(), updatedBy: staff.userId,
+    });
+    await ctx.db.insert("auditEvents", {
+      action: `field_correction_${args.requested ? "requested" : "cleared"}:${args.field}`,
+      ipAddress: "authenticated-staff-session", participantId: participant._id,
+      staffUserId: staff.userId, successful: true, attempts: 1, createdAt: Date.now(),
+    });
     return null;
   },
 });

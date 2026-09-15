@@ -218,3 +218,111 @@ test.each(PARADE_TYPES)("parade registration saves %s without a jersey and suppo
   await t.mutation(api.publicIntake.completeUpload, {sessionId:verified.sessionId, ...await uploadFiles(t), signature, confirmed:true, profile:verified.profile});
   expect(await t.run(ctx => ctx.db.get("participants", session!.participantId))).toMatchObject({status:"pending", signature});
 });
+
+test("verified upload returns the latest saved profile photo across registrations", async () => {
+  const { t, staff } = await setup();
+  await staff.mutation(api.participants.importBatch, { participants: [participant, { ...participant, sport: "Basketball" }] });
+  const photoUrl = await t.run(async ctx => {
+    const photoId = await ctx.storage.store(new Blob(["photo"], { type: "image/png" }));
+    const registration = await ctx.db.query("participants").withIndex("by_studentId_and_sport", q => q.eq("studentId", participant.studentId).eq("sport", "Basketball")).unique();
+    await ctx.db.patch("participants", registration!._id, { profilePhotoId: photoId });
+    return await ctx.storage.getUrl(photoId);
+  });
+  const auditEventId = await t.mutation(api.publicIntake.recordVisit, { ipAddress: "test" });
+  await expect(t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: participant.studentId, phone: "0800000000" })).rejects.toThrow("does not match");
+  const verified = await t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: participant.studentId, phone: participant.phone });
+  expect(verified.profilePhotoUrl).toBe(photoUrl);
+});
+
+test("verified upload has no saved photo for a first-time uploader", async () => {
+  const { t, staff } = await setup();
+  await staff.mutation(api.participants.importBatch, { participants: [participant] });
+  const auditEventId = await t.mutation(api.publicIntake.recordVisit, { ipAddress: "test" });
+  const verified = await t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: participant.studentId, phone: participant.phone });
+  expect(verified.profilePhotoUrl).toBeNull();
+});
+
+async function completedParticipant() {
+  const { t, staff } = await setup();
+  const id = await staff.mutation(api.participants.createParticipant, { participant });
+  const files = await uploadFiles(t);
+  const profile = { ...personalInformation, jerseyNumber: "92", medicalConditions: "None", fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty };
+  await t.run(ctx => ctx.db.patch("participants", id, { ...profile, ...files }));
+  const verify = async () => {
+    const auditEventId = await t.mutation(api.publicIntake.recordVisit, { ipAddress: "test" });
+    return t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: participant.studentId, phone: participant.phone });
+  };
+  return { t, staff, id, files, profile, verify };
+}
+
+test("returning participants can keep all saved images and information", async () => {
+  const { t, id, files, profile, verify } = await completedParticipant();
+  const verified = await verify();
+  expect(Object.values(verified.documentUrls).every(Boolean)).toBe(true);
+  await t.mutation(api.publicIntake.completeUpload, { sessionId: verified.sessionId, confirmed: true, signature });
+  expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({ ...files, ...profile });
+});
+
+test("one marked image can be replaced without reuploading the other documents", async () => {
+  const { t, staff, id, files, verify } = await completedParticipant();
+  await staff.mutation(api.participants.setFieldCorrection, { participantId: id, field: "profilePhotoId", note: "Use student uniform", requested: true });
+  const verified = await verify();
+  expect(verified.correctionRequests).toEqual([{ field: "profilePhotoId", note: "Use student uniform", status: "requested" }]);
+  const args = { sessionId: verified.sessionId, confirmed: true as const, signature };
+  await expect(t.mutation(api.publicIntake.completeUpload, args)).rejects.toThrow("Please correct");
+  await expect(t.mutation(api.publicIntake.completeUpload, { ...args, profilePhotoId: files.profilePhotoId })).rejects.toThrow("Please correct");
+  const replacement = await t.run(ctx => ctx.storage.store(new Blob(["replacement"])));
+  await t.mutation(api.publicIntake.completeUpload, { ...args, profilePhotoId: replacement });
+  expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({ ...files, profilePhotoId: replacement, status: "pending", correctionRequests: [{ field: "profilePhotoId", note: "Use student uniform", status: "submitted" }] });
+  await staff.mutation(api.participants.updateStatus, { participantId: id, status: "verified" });
+  expect((await t.run(ctx => ctx.db.get("participants", id)))?.correctionRequests).toEqual([]);
+});
+
+test("field corrections cannot be skipped, including requests added after verification", async () => {
+  const { t, staff, id, profile, verify } = await completedParticipant();
+  const verified = await verify();
+  await staff.mutation(api.participants.setFieldCorrection, { participantId: id, field: "fullNameEnglish", note: "Use your full name", requested: true });
+  const args = { sessionId: verified.sessionId, confirmed: true as const, signature };
+  await expect(t.mutation(api.publicIntake.completeUpload, args)).rejects.toThrow("Please correct");
+  expect((await t.run(ctx => ctx.db.get("uploadSessions", verified.sessionId)))?.used).toBe(false);
+  await t.mutation(api.publicIntake.completeUpload, { ...args, profile: { ...profile, fullNameEnglish: "Correct Full Name" } });
+  expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({ fullNameEnglish: "Correct Full Name", status: "pending" });
+});
+
+test("correction requests from another sport are shown and resubmitted together", async () => {
+  const { t, staff, id, profile, verify } = await completedParticipant();
+  const other = await staff.mutation(api.participants.createParticipant, { participant: { ...participant, sport: "Basketball" } });
+  await staff.mutation(api.participants.setFieldCorrection, { participantId: other, field: "emergencyContactName", note: "Full contact name", requested: true });
+  const verified = await verify();
+  expect(verified.correctionRequests[0].field).toBe("emergencyContactName");
+  await t.mutation(api.publicIntake.completeUpload, { sessionId: verified.sessionId, confirmed: true, signature, profile: { ...profile, emergencyContactName: "Correct Contact Name" } });
+  for (const participantId of [id, other]) {
+    expect((await t.run(ctx => ctx.db.get("participants", participantId)))?.emergencyContactName).toBe("Correct Contact Name");
+  }
+  expect((await t.run(ctx => ctx.db.get("participants", other)))?.correctionRequests?.[0].status).toBe("submitted");
+});
+
+test("only editors can mark fields; notes are bounded and requests can be cleared", async () => {
+  const { t, staff, id } = await completedParticipant();
+  const args = { participantId: id, field: "birthDate" as const, note: "Check the date", requested: true };
+  await expect(t.mutation(api.participants.setFieldCorrection, args)).rejects.toThrow("Authentication required");
+  for (const role of ["viewer", "co-sport"] as const) {
+    const userId = await t.run(ctx => ctx.db.insert("users", { role, active: true }));
+    await expect(t.withIdentity({ subject: `${userId}|session` }).mutation(api.participants.setFieldCorrection, args)).rejects.toThrow("Read-only access");
+  }
+  await expect(staff.mutation(api.participants.setFieldCorrection, { ...args, note: "x".repeat(501) })).rejects.toThrow("500");
+  await staff.mutation(api.participants.setFieldCorrection, args);
+  await staff.mutation(api.participants.setFieldCorrection, { ...args, requested: false });
+  expect((await t.run(ctx => ctx.db.get("participants", id)))?.correctionRequests).toEqual([]);
+});
+
+test("skipping uploads never bypasses missing documents or required information", async () => {
+  const { t, id, verify } = await completedParticipant();
+  await t.run(ctx => ctx.db.patch("participants", id, { studentIdImageId: undefined }));
+  const verified = await verify();
+  const args = { sessionId: verified.sessionId, confirmed: true as const, signature };
+  await expect(t.mutation(api.publicIntake.completeUpload, args)).rejects.toThrow("all three images");
+  const files = await uploadFiles(t);
+  await t.run(ctx => ctx.db.patch("participants", id, { ...files, nationalIdNumber: "" }));
+  await expect(t.mutation(api.publicIntake.completeUpload, args)).rejects.toThrow("nationalIdNumber");
+});

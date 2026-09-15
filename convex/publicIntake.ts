@@ -1,3 +1,5 @@
+import { correctionValidator } from "./correctionValidators";
+import { CORRECTION_FIELDS, activeCorrections, isDocumentField } from "../shared/corrections";
 import { PARADE_TYPES, participantKind } from "../shared/participantKinds";
 import { signatureValidator, certifySignature } from "./signatures";
 import { normalizeInformation } from "./participantInformation";
@@ -85,6 +87,7 @@ export const registerPerformer = mutation({
   returns: v.object({
     sessionId: v.id("uploadSessions"),
     name: v.string(),
+    profilePhotoUrl: v.union(v.string(), v.null()),
     performerType: v.union(v.literal("Katakorn"), v.literal("Cheerleader"), v.literal("Parade")),
   }),
   handler: async (ctx, args) => {
@@ -175,7 +178,9 @@ export const registerPerformer = mutation({
       expiresAt: Date.now() + 30 * 60 * 1000,
       used: false,
     });
-    return { sessionId, name: fullNameThai, performerType: args.performerType };
+    const documents = await existingDocuments(ctx, studentId);
+    const profilePhotoUrl = documents.profilePhotoId ? await ctx.storage.getUrl(documents.profilePhotoId) : null;
+    return { sessionId, name: fullNameThai, performerType: args.performerType, profilePhotoUrl };
   },
 });
 
@@ -186,7 +191,7 @@ export const verifyIdentity = mutation({
     phone: v.string(),
     auditEventId: v.id("auditEvents"),
   },
-  returns: v.object({ sessionId: v.id("uploadSessions"), name: v.string(), sport: v.string(), faculty: v.string(), phone: v.string(), requiresJersey: v.boolean(), profile: profileInput }),
+  returns: v.object({ sessionId: v.id("uploadSessions"), name: v.string(), sport: v.string(), faculty: v.string(), phone: v.string(), requiresJersey: v.boolean(), profilePhotoUrl: v.union(v.string(), v.null()), documentUrls: v.object({ profile: v.union(v.string(), v.null()), nationalId: v.union(v.string(), v.null()), studentId: v.union(v.string(), v.null()) }), correctionRequests: v.array(correctionValidator), profile: profileInput }),
   handler: async (ctx, args) => {
     const audit = await ctx.db.get("auditEvents", args.auditEventId);
     if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) throw new ConvexError("Verification session expired");
@@ -211,7 +216,15 @@ export const verifyIdentity = mutation({
       expiresAt: Date.now() + 15 * 60 * 1000,
       used: false,
     });
-    return { sessionId, requiresJersey: registrations.some(row => participantKind(row) !== "performer"), name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
+    const documents = await existingDocuments(ctx, studentId);
+    const profilePhotoUrl = documents.profilePhotoId ? await ctx.storage.getUrl(documents.profilePhotoId) : null;
+    const documentUrls = {
+      profile: profilePhotoUrl,
+      nationalId: documents.nationalIdImageId ? await ctx.storage.getUrl(documents.nationalIdImageId) : null,
+      studentId: documents.studentIdImageId ? await ctx.storage.getUrl(documents.studentIdImageId) : null,
+    };
+    const correctionRequests = registrations.flatMap(row => activeCorrections(row.correctionRequests));
+    return { sessionId, profilePhotoUrl, documentUrls, correctionRequests, requiresJersey: registrations.some(row => participantKind(row) !== "performer"), name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
       fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty,
       nicknameThai: participant.nicknameThai, nicknameEnglish: participant.nicknameEnglish, sex: participant.sex,
       nationalIdNumber: participant.nationalIdNumber, birthDate: participant.birthDate, guardianPhone: participant.guardianPhone, emergencyContactName: participant.emergencyContactName, emergencyContactRelationship: participant.emergencyContactRelationship, drugAllergies: participant.drugAllergies, foodAllergies: participant.foodAllergies, hospitalizationHistory: participant.hospitalizationHistory,
@@ -232,7 +245,7 @@ export const generateUploadUrl = mutation({
 });
 
 export const completeUpload = mutation({
-  args: { signature: v.optional(signatureValidator), profile: v.optional(profileInput), confirmed: v.optional(v.literal(true)), sessionId: v.id("uploadSessions"), profilePhotoId: v.id("_storage"), nationalIdImageId: v.id("_storage"), studentIdImageId: v.id("_storage") },
+  args: { signature: v.optional(signatureValidator), profile: v.optional(profileInput), confirmed: v.optional(v.literal(true)), sessionId: v.id("uploadSessions"), profilePhotoId: v.optional(v.id("_storage")), nationalIdImageId: v.optional(v.id("_storage")), studentIdImageId: v.optional(v.id("_storage")) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get("uploadSessions", args.sessionId);
@@ -241,39 +254,56 @@ export const completeUpload = mutation({
     if (!participant) throw new ConvexError("Participant not found");
     if (session.studentId && session.studentId !== participant.studentId) throw new ConvexError("Registration changed. Please verify your identity again");
     const audit = await ctx.db.get("auditEvents", session.auditEventId);
-    if (audit?.action !== "performer_registration_started" && (!args.profile || !args.confirmed)) {
+    if (audit?.action !== "performer_registration_started" && !args.confirmed) {
       throw new ConvexError("Please complete and confirm your information before submitting");
     }
-    if (args.profile) {
-      if (!args.confirmed) throw new ConvexError("Please confirm your information");
-      const profile = {
-        ...args.profile,
-        fullNameThai: args.profile.fullNameThai.trim(),
-        fullNameEnglish: args.profile.fullNameEnglish.trim(),
-        faculty: args.profile.faculty.trim(),
-        email: args.profile.email?.trim().toLowerCase() || undefined,
-      };
-      if (!profile.fullNameThai || !profile.fullNameEnglish) throw new ConvexError("Thai and English names are required");
-      if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(profile.faculty)) throw new ConvexError("Choose a supported faculty");
-      if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) throw new ConvexError("Please enter a valid email address");
-      const registrations = await registrationsForStudent(ctx, participant.studentId);
-      Object.assign(profile, normalizeInformation(args.profile, true, registrations.some(row => participantKind(row) !== "performer")), certifySignature(args.signature, profile.fullNameThai));
-      for (const row of registrations) {
-        const { jerseyNumber, ...personalProfile } = profile;
-        await ctx.db.patch("participants", row._id, participantKind(row) === "performer" ? personalProfile : {...personalProfile, jerseyNumber});
+    const registrations = await registrationsForStudent(ctx, participant.studentId);
+    const previousDocuments = await existingDocuments(ctx, participant.studentId);
+    const uploaded = {
+      ...(args.profilePhotoId ? { profilePhotoId: args.profilePhotoId } : {}),
+      ...(args.nationalIdImageId ? { nationalIdImageId: args.nationalIdImageId } : {}),
+      ...(args.studentIdImageId ? { studentIdImageId: args.studentIdImageId } : {}),
+    };
+    const documents = { ...previousDocuments, ...uploaded };
+    for (const id of [documents.profilePhotoId, documents.nationalIdImageId, documents.studentIdImageId]) {
+      if (!id || !await ctx.db.system.get("_storage", id)) throw new ConvexError("Please upload all three images");
+    }
+    const sourceProfile = args.profile ?? participant;
+    if (!sourceProfile.fullNameThai.trim() || !sourceProfile.fullNameEnglish.trim()) throw new ConvexError("Thai and English names are required");
+    const profile = {
+      ...Object.fromEntries(Object.keys(profileInput.fields).map(key => [key, sourceProfile[key as keyof typeof sourceProfile]])),
+      fullNameThai: sourceProfile.fullNameThai.trim(),
+      fullNameEnglish: sourceProfile.fullNameEnglish.trim(),
+      faculty: sourceProfile.faculty.trim(),
+      email: sourceProfile.email?.trim().toLowerCase() || undefined,
+      ...normalizeInformation(sourceProfile, true, registrations.some(row => participantKind(row) !== "performer")),
+      ...certifySignature(args.signature, sourceProfile.fullNameThai.trim()),
+    };
+    if (!profile.fullNameThai || !profile.fullNameEnglish) throw new ConvexError("Thai and English names are required");
+    if (!["คณะแพทยศาสตร์", "คณะศิลปศาสตร์", "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์"].includes(profile.faculty)) throw new ConvexError("Choose a supported faculty");
+    if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) throw new ConvexError("Please enter a valid email address");
+    for (const row of registrations) {
+      for (const request of activeCorrections(row.correctionRequests)) {
+        const field = request.field;
+        const changed = isDocumentField(field)
+          ? uploaded[field as keyof typeof uploaded] && uploaded[field as keyof typeof uploaded] !== row[field as keyof typeof uploaded]
+          : String(profile[field as keyof typeof profile] ?? "").trim() !== String(row[field as keyof typeof row] ?? "").trim();
+        if (!changed) throw new ConvexError(`Please correct ${CORRECTION_FIELDS[field]} before submitting`);
       }
     }
-    if (!args.profile) {
-      const certification = certifySignature(args.signature, participant.fullNameThai);
-      for (const row of await registrationsForStudent(ctx, participant.studentId)) {
-        await ctx.db.patch("participants", row._id, certification);
+    for (const row of registrations) {
+      const { jerseyNumber, ...personalProfile } = profile;
+      await ctx.db.patch("participants", row._id, participantKind(row) === "performer" ? personalProfile : { ...personalProfile, jerseyNumber });
+    }
+    await linkDocuments(ctx, participant, uploaded);
+    for (const row of registrations) {
+      if (activeCorrections(row.correctionRequests).length) {
+        await ctx.db.patch("participants", row._id, {
+          correctionRequests: row.correctionRequests!.map(request => ({ ...request, status: "submitted" as const })),
+          status: "pending",
+        });
       }
     }
-    await linkDocuments(ctx, participant, {
-      profilePhotoId: args.profilePhotoId,
-      nationalIdImageId: args.nationalIdImageId,
-      studentIdImageId: args.studentIdImageId,
-    });
     await ctx.db.patch("uploadSessions", session._id, { used: true });
     await ctx.db.patch("auditEvents", session.auditEventId, {
       action: participant.participantKind === "performer"

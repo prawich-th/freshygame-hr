@@ -1,156 +1,37 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
 
-import { SignaturePad } from "./SignaturePad";
-import type { Signature } from "@/shared/signature";
-import { errorMessage, UserFacingError } from "../lib/errors";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Check, LockKeyhole, ShieldCheck, UploadCloud } from "lucide-react";
+import { CorrectionScope, CorrectionSummary } from "./FieldCorrections";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
-import { ParticipantInformationFields, type ParticipantInformation } from "./ParticipantInformationFields";
-import { Brand } from "./Brand";
-import { compressImage, type UploadImageKind } from "../lib/compressImage";
-
-type Profile = ParticipantInformation & { fullNameThai: string; fullNameEnglish: string; faculty: string; nicknameThai?: string; nicknameEnglish?: string; sex?: string; email?: string; lineId?: string; instagram?: string; preferredContact?: string };
-type Verified = { sessionId: Id<"uploadSessions">; name: string; sport: string; faculty: string; phone: string; requiresJersey: boolean; profile: Profile };
+import { Check, ShieldCheck } from "lucide-react";
+import { ChooseDocumentsStep } from "./self-upload/ChooseDocumentsStep";
+import { ReviewInformationStep } from "./self-upload/ReviewInformationStep";
+import { UploadLayout } from "./self-upload/UploadLayout";
+import { VerifyIdentityStep } from "./self-upload/VerifyIdentityStep";
+import { useSelfUpload } from "./self-upload/useSelfUpload";
 
 export function SelfUpload() {
-  const verifyIdentity = useMutation(api.publicIntake.verifyIdentity);
-  const generateUploadUrl = useMutation(api.publicIntake.generateUploadUrl);
-  const completeUpload = useMutation(api.publicIntake.completeUpload);
-  const [profile, setProfile] = useState<Profile>({ fullNameThai: "", fullNameEnglish: "", faculty: "" });
-  const [confirmed, setConfirmed] = useState(false);
-  const [signature, setSignature] = useState<Signature>([]);
-  const [step, setStep] = useState(1);
-  const [auditId, setAuditId] = useState<Id<"auditEvents"> | null>(null);
-  const [verified, setVerified] = useState<Verified | null>(null);
-  const [files, setFiles] = useState<{ profile: File | null; nationalId: File | null; studentId: File | null }>({ profile: null, nationalId: null, studentId: null });
-  const [preview, setPreview] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetch("/api/client-context", { method: "POST" })
-      .then((r) => r.json())
-      .then((data) => setAuditId(data.auditEventId))
-      .catch(() => setError("ไม่สามารถเริ่มเซสชันได้ กรุณาลองอีกครั้ง / Could not start a secure session."));
-  }, []);
-
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-
-  async function handleVerify(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
-    const data = new FormData(event.currentTarget);
-    try {
-      if (!auditId) throw new UserFacingError("Secure session is still loading");
-      const result = await verifyIdentity({
-        studentId: String(data.get("studentId")),
-        phone: String(data.get("phone")),
-        auditEventId: auditId,
-      });
-      setVerified(result); setProfile(result.profile); setStep(2);
-    } catch (e) { setError(errorMessage(e, "Verify your details")); }
-    finally { setBusy(false); }
-  }
-
-  function chooseFile(kind: "profile" | "nationalId" | "studentId", nextFile?: File) {
-    if (!nextFile) return;
-    if (!nextFile.type.startsWith("image/") || nextFile.size > 25 * 1024 * 1024) {
-      setError("Please choose a JPG, PNG, or WebP image under 25 MB"); return;
-    }
-    if (kind === "profile" && preview) URL.revokeObjectURL(preview);
-    setFiles((current) => ({ ...current, [kind]: nextFile }));
-    if (kind === "profile") setPreview(URL.createObjectURL(nextFile));
-    setError("");
-  }
-
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError("");
-    if (!verified || !files.profile || !files.nationalId || !files.studentId) return setError("กรุณาอัปโหลดรูปทั้ง 3 รายการ / Please upload all three images");
-    if (signature.flat().length < 2) return setError("Please draw your signature before submitting");
-    if (!confirmed) return setError("Please confirm your information");
-    setBusy(true);
-    try {
-      const uploadImage = async (file: File, kind: UploadImageKind) => {
-        const compressed = await compressImage(file, kind);
-        const uploadUrl = await generateUploadUrl({ sessionId: verified.sessionId });
-        const response = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": compressed.type }, body: compressed });
-        if (!response.ok) throw new UserFacingError("Image upload failed");
-        return (await response.json()).storageId as Id<"_storage">;
-      };
-      const profilePhotoId = await uploadImage(files.profile, "profile");
-      const nationalIdImageId = await uploadImage(files.nationalId, "nationalId");
-      const studentIdImageId = await uploadImage(files.studentId, "studentId");
-      await completeUpload({ signature, profile, confirmed: true, sessionId: verified.sessionId, profilePhotoId, nationalIdImageId, studentIdImageId });
-      setStep(4);
-    } catch (e) { setError(errorMessage(e, "Upload images")); }
-    finally { setBusy(false); }
-  }
-
+  const flow = useSelfUpload();
   return (
-    <main className="intake-page">
-      <aside className="intake-aside">
-        <Brand />
-        <div className="intake-aside__copy"><span>PARTICIPANT DOCUMENT PORTAL</span><h1>ส่งเอกสาร<br />ของคุณให้ครบ</h1><p>ใช้ข้อมูลเดียวกับที่ลงทะเบียนไว้เพื่อยืนยันตัวตน จากนั้นอัปโหลดรูปโปรไฟล์ รูปบัตรประชาชน และรูปบัตรนักศึกษาอย่างปลอดภัย</p></div>
-        <div className="intake-aside__orb" />
-      </aside>
-      <section className="intake-main">
-        <div className="intake-main__top"><Link className="text-link" href="/"><ArrowLeft size={15} /> กลับหน้าหลัก</Link></div>
-        <div className="intake-card">
-          <div className="stepper">
-            {([[1,"ยืนยันตัวตน"],[2,"ส่งเอกสาร"],[3,"ยืนยันข้อมูล"],[4,"เสร็จสิ้น"]] as const).map(([number,label], index) => <div key={number} style={{display:"contents"}}><div className={`stepper__item ${step >= number ? "stepper__item--active" : ""}`}><b>{step > number ? <Check size={13}/> : number}</b><span>{label}</span></div>{index < 3 && <div className="stepper__line" />}</div>)}
-          </div>
+    <CorrectionScope requests={flow.verified?.correctionRequests ?? []}>
+    <UploadLayout step={flow.step}>
+      {flow.step !== 4 && <CorrectionSummary requests={flow.verified?.correctionRequests ?? []} />}
+      {flow.step === 1 && <VerifyIdentityStep flow={flow} />}
+      {flow.step === 2 && <ChooseDocumentsStep flow={flow} />}
+      {flow.step === 3 && <ReviewInformationStep flow={flow} />}
+      {flow.step === 4 && <UploadComplete />}
+    </UploadLayout>
+    </CorrectionScope>
+  );
+}
 
-          {step === 1 && <>
-            <h2>ยืนยันตัวตนของคุณ</h2><p>Verify your identity with your Student ID and full registered phone number.</p>
-            <form onSubmit={handleVerify}>
-              <div className="field"><label>หมายเลขประจำตัวนักศึกษา / Student ID <span>*</span></label><input className="input" name="studentId" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} placeholder="เช่น 6909680123" /></div>
-              <div className="field"><label>หมายเลขโทรศัพท์ที่ลงทะเบียน / Registered phone number <span>*</span></label><input className="input" name="phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="081-234-5678 or +66 81 234 5678" /></div>
-              <div className="notice notice--info"><LockKeyhole size={13} style={{verticalAlign:"middle",marginRight:6}}/>IP address and browser details are recorded to protect your personal data.</div>
-              {error && <div className="notice notice--error">{error}</div>}
-              <button className="button button--primary button--large" disabled={busy || !auditId}>{busy ? <span className="spinner" /> : <>ตรวจสอบข้อมูล <ArrowRight size={17}/></>}</button>
-            </form>
-          </>}
-
-          {step === 2 && verified && <>
-            <h2>ส่งเอกสารเพิ่มเติม</h2><p>Upload once for all your sports and activities. Your profile photo, national ID, and student ID images will be linked automatically to every registration with your Student ID. Images are compressed automatically. The PDF adds a signed certified-copy layout to both ID images.</p>
-            <div className="verified-person"><span className="verified-person__icon"><BadgeCheck size={20}/></span><div><strong>{verified.name || "Incomplete profile / กรุณากรอกข้อมูลให้ครบ"}</strong><span>{verified.sport} · {verified.faculty}</span></div></div>
-            <form onSubmit={event => { event.preventDefault(); if (!files.profile || !files.nationalId || !files.studentId) { setError("Please upload all three images"); return; } setError(""); setStep(3); }}>
-              <div className="document-upload-grid">
-                <div className="upload-drop"><input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("profile", e.target.files?.[0])}/><label htmlFor="photo">{preview ? <img className="photo-preview" src={preview} alt="Profile preview"/> : <Camera size={28}/>}<strong>รูปโปรไฟล์</strong><span>Profile photo</span></label></div>
-                <div className={`upload-drop ${files.nationalId ? "upload-drop--ready" : ""}`}><input id="national-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("nationalId", e.target.files?.[0])}/><label htmlFor="national-card">{files.nationalId ? <Check size={28}/> : <UploadCloud size={28}/>}<strong>บัตรประชาชน</strong><span>{files.nationalId?.name ?? "National ID card image"}</span></label></div>
-                <div className={`upload-drop ${files.studentId ? "upload-drop--ready" : ""}`}><input id="student-card" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile("studentId", e.target.files?.[0])}/><label htmlFor="student-card">{files.studentId ? <Check size={28}/> : <UploadCloud size={28}/>}<strong>บัตรนักศึกษา</strong><span>{files.studentId?.name ?? "Student ID card image"}</span></label></div>
-              </div>
-              {error && <div className="notice notice--error">{error}</div>}
-              <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner"/> : <><ArrowRight size={17}/> ตรวจสอบข้อมูล / Review information</>}</button>
-            </form>
-          </>}
-
-          {step === 3 && verified && <>
-            <h2>ยืนยันข้อมูล / Confirm information</h2>
-            <p>Complete the missing required information and check your details before submitting. These personal details apply to all your registrations.</p>
-            <div className="notice notice--info">Registered phone: {verified.phone}<br/>Sports / activities: {verified.sport}<br/>Files: {[files.profile?.name, files.nationalId?.name, files.studentId?.name].join(", ")}</div>
-            <form onSubmit={handleUpload}>
-              <fieldset disabled={busy} style={{border: 0, padding: 0, margin: 0}}>
-              <div className="form-grid">
-                <ParticipantInformationFields value={profile} includeJersey={verified.requiresJersey} required onChange={(key, value) => { setProfile(current => ({...current, [key]: value})); setConfirmed(false); }}/>
-                {([['fullNameThai', 'ชื่อ-สกุล / Thai full name'], ['fullNameEnglish', 'English full name'], ['nicknameThai', 'Thai nickname'], ['nicknameEnglish', 'English nickname'], ['sex', 'Sex'], ['email', 'Email'], ['lineId', 'LINE ID'], ['instagram', 'Instagram'], ['preferredContact', 'Preferred contact']] as const).map(([key, label]) => <div className="field" key={key}><label htmlFor={`confirm-${key}`}>{label}{(key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex') && ' *'}</label><input id={`confirm-${key}`} className="input" type={key === 'email' ? 'email' : 'text'} required={key === 'fullNameThai' || key === 'fullNameEnglish' || key === 'sex'} value={profile[key] ?? ''} onChange={e => { setProfile(current => ({...current, [key]: e.target.value})); setConfirmed(false); }}/></div>)}
-                <div className="field field--wide"><label htmlFor="confirm-faculty">Faculty *</label><select id="confirm-faculty" className="select" required value={profile.faculty} onChange={e => { setProfile(current => ({...current, faculty: e.target.value})); setConfirmed(false); }}><option value="">Select faculty</option>{['คณะแพทยศาสตร์', 'คณะศิลปศาสตร์', 'วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์'].map(faculty => <option key={faculty}>{faculty}</option>)}</select></div>
-              </div>
-              <SignaturePad disabled={busy} onChange={value => { setSignature(value); setConfirmed(false); }}/>
-              <label><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I confirm that my information and selected documents are correct.</label>
-              {error && <div role="alert" className="notice notice--error">{error}</div>}
-              <div className="participant-edit__actions"><button type="button" className="button button--ghost" onClick={() => { setConfirmed(false); setSignature([]); setError(''); setStep(2); }}>Back to documents</button><button className="button button--primary" disabled={!confirmed || busy}>{busy ? <span className="spinner"/> : 'Confirm and submit'}</button></div>
-              </fieldset>
-            </form>
-          </>}
-
-          {step === 4 && <div className="success-panel"><div className="success-panel__check"><Check size={34}/></div><h2>ส่งเอกสารเรียบร้อยแล้ว</h2><p>Your documents are now waiting for staff review. You can safely close this page.</p><div className="notice notice--success"><ShieldCheck size={14} style={{verticalAlign:"middle",marginRight:6}}/>ข้อมูลของคุณถูกส่งอย่างปลอดภัยแล้ว</div><Link href="/" className="button button--ghost button--large" style={{marginTop:22}}>กลับหน้าหลัก</Link></div>}
-        </div>
-      </section>
-    </main>
+function UploadComplete() {
+  return (
+    <section className="success-panel">
+      <div className="success-panel__check"><Check size={34} /></div>
+      <h2>ส่งเอกสารเรียบร้อยแล้ว</h2>
+      <p>เจ้าหน้าที่จะตรวจสอบเอกสารของคุณ คุณสามารถปิดหน้านี้ได้<br />Your documents are waiting for staff review. You can safely close this page.</p>
+      <div className="notice notice--success"><ShieldCheck size={16} /> ข้อมูลของคุณถูกส่งอย่างปลอดภัยแล้ว</div>
+      <Link href="/" className="button button--ghost button--large">กลับหน้าหลัก / Back to home</Link>
+    </section>
   );
 }
