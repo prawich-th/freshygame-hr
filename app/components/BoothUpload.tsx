@@ -1,5 +1,7 @@
 "use client";
 
+import { RequestSignatureLink } from "./RequestSignatureLink";
+
 import { ProfilePhotoGuide } from "./ProfilePhotoGuide";
 /* eslint-disable @next/next/no-img-element */
 
@@ -285,6 +287,8 @@ function BoothWorkspace() {
       <h1>Documents saved</h1>
       <p>The new images have been added to <strong>{participant.fullNameThai}</strong>’s protected record.</p>
       <div className="booth-success__record"><FileCheck2 size={21} /><div><strong>{participant.studentId}</strong><span>{participant.sport} · {participant.faculty}</span></div><BadgeCheck size={20} /></div>
+      <p>A participant signature is required before the record can pass verification.</p>
+      <RequestSignatureLink participantId={participant._id} />
       <button className="booth-primary booth-primary--wide" onClick={startNext}><RotateCcw size={18} /> Next participant</button>
       <Link className="booth-back-link" href="/staff">Return to staff portal</Link>
     </section>}

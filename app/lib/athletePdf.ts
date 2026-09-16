@@ -173,12 +173,15 @@ export async function generateAthletePdf(entries: ParticipantPdfEntry[], options
         pdf.text("สำเนาถูกต้อง", WIDTH / 2, 752, { align: "center" });
         pdf.setFontSize(14);
         pdf.text("ใช้สําหรับการแข่งขันกีฬา TU Freshy Games 2026 เท่านั้น", WIDTH / 2, 768, { align: "center" });
-        const signed = documentEntry.participant;
-        if (signed.signature?.length) {
-          drawSignature(pdf, signed, 232, 775, 130, 24);
-          pdf.setFontSize(14);
-          pdf.text(`(${signed.signedName || name(documentEntry)})`, WIDTH / 2, 815, { align: "center" });
-        }
+      }
+      // Certification belongs to the profile being printed, not whichever registration
+      // supplied an image. Never borrow a signature from a different/older registration.
+      const renderedSignature = drawSignature(pdf, p, 232, 775, 130, 24);
+      pdf.setFontSize(14);
+      if (renderedSignature) {
+        pdf.text(`(${p.signedName || name(registrations[0])})`, WIDTH / 2, 815, { align: "center" });
+      } else {
+        pdf.text("ยังไม่มีลายมือชื่อที่บันทึกไว้ กรุณาลงนามอีกครั้ง", WIDTH / 2, 792, { align: "center" });
       }
 
     });

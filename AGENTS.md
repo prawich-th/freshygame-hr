@@ -21,3 +21,7 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+## UI design consistency
+
+When adding or changing a UI element, inspect the surrounding elements first and match their design language. Reuse existing components and styles where possible, including typography, colors, spacing, padding, borders, corner radii, section headers, buttons, and responsive behavior. New elements should feel like part of the same interface. Introduce a different visual pattern only when the user requests it or the existing patterns cannot support the interaction.

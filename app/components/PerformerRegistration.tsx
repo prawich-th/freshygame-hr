@@ -5,7 +5,7 @@ import { ProfilePhotoGuide } from "./ProfilePhotoGuide";
 
 import { PARADE_TYPES } from "@/shared/participantKinds";
 import { SignaturePad } from "./SignaturePad";
-import type { Signature } from "@/shared/signature";
+import { isValidSignature, type Signature } from "@/shared/signature";
 import { errorMessage, UserFacingError } from "../lib/errors";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -109,7 +109,7 @@ export function PerformerRegistration() {
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (signature.flat().length < 2) { setError("Please draw your signature before submitting"); return; }
+    if (!isValidSignature(signature)) { setError("Please draw your signature before submitting"); return; }
     setError("");
     if (!registration || !files.profile || !files.nationalId || !files.studentId) {
       setError("กรุณาอัปโหลดรูปทั้ง 3 รายการ / Please upload all three images");
@@ -212,7 +212,7 @@ export function PerformerRegistration() {
               <DocumentUploadFields {...documents} existingPhotoUrl={registration.profilePhotoUrl} disabled={busy} />
               <SignaturePad disabled={busy} onChange={setSignature}/>
               {error && <div className="notice notice--error">{error}</div>}
-              <button className="button button--primary button--large" disabled={busy}>{busy ? <span className="spinner" /> : <><UploadCloud size={17} /> ส่งใบสมัคร</>}</button>
+              <button className="button button--primary button--large" disabled={busy || !isValidSignature(signature)}>{busy ? <span className="spinner" /> : <><UploadCloud size={17} /> ส่งใบสมัคร</>}</button>
             </form>
           </>}
 

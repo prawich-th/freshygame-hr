@@ -1,4 +1,5 @@
 export const CORRECTION_FIELDS = {
+  signature: "ลายมือชื่อ / Signature",
   profilePhotoId: "รูปนักศึกษา / Student photo",
   nationalIdImageId: "บัตรประชาชน / National ID image",
   studentIdImageId: "บัตรนักศึกษา / Student ID image",

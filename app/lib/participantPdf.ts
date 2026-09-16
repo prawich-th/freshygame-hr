@@ -257,8 +257,12 @@ function cell(pdf: Pdf, value: string, x: number, y: number, width: number, heig
 }
 
 export function drawSignature(pdf: Pdf, participant: Doc<"participants">, x: number, y: number, width: number, height = width * 0.3) {
-  const points = participant.signature?.flat() ?? [];
-  if (points.length < 2) return;
+  const strokes = (participant.signature ?? []).filter(stroke =>
+    stroke.length > 1 && stroke.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)) &&
+    stroke.some(point => point.x !== stroke[0].x || point.y !== stroke[0].y),
+  );
+  const points = strokes.flat();
+  if (points.length < 2) return false;
   // Center the actual ink, rather than the blank margins of the capture canvas.
   const minX = Math.min(...points.map(point => point.x));
   const minY = Math.min(...points.map(point => point.y));
@@ -267,10 +271,13 @@ export function drawSignature(pdf: Pdf, participant: Doc<"participants">, x: num
   const scale = Math.min(width / inkWidth, height / inkHeight);
   const left = x + (width - inkWidth * scale) / 2;
   const top = y + (height - inkHeight * scale) / 2;
-  pdf.setDrawColor(25, 25, 25); pdf.setLineWidth(0.35);
-  for (const stroke of participant.signature ?? []) {
+  // Keep the same visible stroke thickness in the mm report and the pt official form.
+  pdf.setDrawColor(25, 25, 25); pdf.setLineWidth(1 / pdf.internal.scaleFactor);
+  pdf.setLineCap("round"); pdf.setLineJoin("round");
+  for (const stroke of strokes) {
     for (let i = 1; i < stroke.length; i++) pdf.line(left + (stroke[i - 1].x - minX) * scale, top + (stroke[i - 1].y - minY) * scale, left + (stroke[i].x - minX) * scale, top + (stroke[i].y - minY) * scale);
   }
+  return true;
 }
 
 function compactDocument(pdf: Pdf, label: string, data: string | null, x: number, y: number, width: number, height: number) {

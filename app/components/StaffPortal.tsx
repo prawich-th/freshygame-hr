@@ -1,5 +1,7 @@
 "use client";
 
+import { RequestSignatureLink } from "./RequestSignatureLink";
+import { SignaturePreview } from "./SignaturePreview";
 import { ParticipantRecordDetails } from "./ParticipantRecordDetails";
 import { FieldCorrectionEditor } from "./FieldCorrectionEditor";
 import { ProfilePhotoGuide } from "./ProfilePhotoGuide";
@@ -253,6 +255,8 @@ function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; on
       ["Student ID card", "studentId", detail.studentIdImageUrl],
     ] as const).map(([label, kind, url]) => canEdit && url ? <RotatableDocumentPreview key={`${kind}-${url}`} label={label} url={url} disabled={busy || editing || pdfState === "loading"} clearsSignature={kind !== "profile" && Boolean(p.signature?.length)} onSave={file => saveImageEdit(file, kind)}/> : <DocumentPreview key={kind} label={label} url={url}/>)}</div>
     </section>
+    {canEdit && <RequestSignatureLink participantId={id} disabled={busy || editing} />}
+    {canEdit && <SignaturePreview signature={p.signature} signedName={p.signedName} signedAt={p.signedAt} />}
 
     <div aria-live="polite" aria-atomic="true">{pdfState !== "idle" && <div className={`notice ${pdfState === "error" ? "notice--error" : pdfState === "success" ? "notice--success" : "notice--info"}`} style={{margin:"0 24px 16px"}}>{pdfState === "loading" ? "Preparing your PDF. Please wait…" : pdfState === "success" ? "PDF download started. Check your browser’s downloads." : `PDF download failed: ${pdfError}. Please try again.`}</div>}</div>
     {canEdit && <details className="record-replacement"><summary>Replace document images<span>Choose new files when an image needs updating</span></summary><form className="staff-upload" onSubmit={staffUpload}><h3>Update document images</h3><ProfilePhotoGuide /><p>Uploads are linked to all registrations with this Student ID. Images are compressed automatically. The PDF adds a certified-copy statement to the ID images. Replacing either ID image clears the saved signature; the participant must sign the new copies.</p><div className="form-grid"><FileField label="Profile photo" onFile={file=>setFiles(current=>({...current,profile:file}))}/><FileField label="National ID card" onFile={file=>setFiles(current=>({...current,nationalId:file}))}/><div className="field field--wide"><FileField label="Student ID card" onFile={file=>setFiles(current=>({...current,studentId:file}))}/></div></div><button className="button button--primary" disabled={busy}>{busy?<span className="spinner"/>:"Save document images"}</button></form></details>}

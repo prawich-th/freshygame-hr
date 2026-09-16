@@ -7,7 +7,7 @@ import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import type { Signature } from "@/shared/signature";
+import { isValidSignature, type Signature } from "@/shared/signature";
 import { useDocumentFiles } from "../DocumentUploadFields";
 import { errorMessage, UserFacingError } from "../../lib/errors";
 import { compressImage, type UploadImageKind } from "../../lib/compressImage";
@@ -32,7 +32,7 @@ export function useSelfUpload() {
   const needsDocument = (kind: keyof typeof DOCUMENT_KEYS) => !files[kind] && (!verified?.documentUrls[kind] || verified.correctionRequests.some(request => request.field === DOCUMENT_KEYS[kind]));
   const documentsReady = Boolean(verified) && !Object.keys(DOCUMENT_KEYS).some(kind => needsDocument(kind as keyof typeof DOCUMENT_KEYS));
   const savedProfileComplete = Boolean(verified && isIntakeProfileComplete(verified.profile, verified.requiresJersey));
-  const profileCorrections = verified?.correctionRequests.filter(request => !isDocumentField(request.field)) ?? [];
+  const profileCorrections = verified?.correctionRequests.filter(request => !isDocumentField(request.field) && request.field !== "signature") ?? [];
 
   useEffect(() => {
     fetch("/api/client-context", { method: "POST" })
@@ -65,7 +65,7 @@ export function useSelfUpload() {
     event.preventDefault();
     setError("");
     if (!verified || !documentsReady) return setError("กรุณาเพิ่มรูปที่ขาดหรือแก้ไขรูปที่เจ้าหน้าที่ระบุ / Add missing images and replace those marked for correction.");
-    if (signature.flat().length < 2) return setError("Please draw your signature before submitting");
+    if (!isValidSignature(signature)) return setError("Please draw your signature before submitting");
     if (!confirmed) return setError("Please confirm your information");
     setBusy(true);
     try {
@@ -113,7 +113,7 @@ export function useSelfUpload() {
     setConfirmed(false);
   }
 
-  return { documentsReady, savedProfileComplete, profileCorrections, step, auditId, verified, profile, confirmed, setConfirmed, busy, error, documents,
+  return { signatureReady: isValidSignature(signature), documentsReady, savedProfileComplete, profileCorrections, step, auditId, verified, profile, confirmed, setConfirmed, busy, error, documents,
     handleVerify, handleUpload, reviewDocuments, backToDocuments, updateProfile, updateSignature };
 }
 

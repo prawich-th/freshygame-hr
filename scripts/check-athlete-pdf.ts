@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
+import { jsPDF } from "jspdf";
 import { athleteFormGroups } from "../app/lib/athletePdf";
-import { generateParticipantPdf, type ParticipantPdfEntry } from "../app/lib/participantPdf";
+import { drawSignature, generateParticipantPdf, type ParticipantPdfEntry } from "../app/lib/participantPdf";
 
 const options = {
   save: false,
@@ -46,6 +47,19 @@ await assert.rejects(() => generateParticipantPdf([broken], "test", { ...options
 const brokenCard = entry(1);
 brokenCard.studentIdImageUrl = "data:image/png;base64,invalid";
 await assert.rejects(() => generateParticipantPdf([brokenCard], "test", options));
+const signed = entry(1);
+signed.participant.signedName = "SAVED SIGNER";
+signed.participant.signature = [[{ x: 40, y: 120 }, { x: 80, y: 30 }, { x: 180, y: 100 }]];
+for (const unit of ["pt", "mm"] as const) {
+  const pdf = new jsPDF({ unit });
+  assert.equal(drawSignature(pdf, signed.participant, 20, 20, 50, 20), true);
+  assert.ok(Math.abs(pdf.getLineWidth() * pdf.internal.scaleFactor - 1) < 0.001);
+  assert.equal(drawSignature(pdf, entry(1).participant, 20, 20, 50, 20), false);
+  assert.equal(drawSignature(pdf, { ...signed.participant, signature: [[{ x: 1, y: 1 }], [{ x: 5, y: 5 }]] }, 20, 20, 50, 20), false);
+  assert.equal(drawSignature(pdf, { ...signed.participant, signature: [[{ x: NaN, y: 1 }, { x: 5, y: 5 }]] }, 20, 20, 50, 20), false);
+}
 await mkdir("tmp/pdfs", { recursive: true });
 await writeFile("tmp/pdfs/athlete-overflow-check.pdf", new Uint8Array(large));
-console.log("Athlete PDF checks passed: original pages, overflow, deduplication, sorting, mixed roles, empty input, oversized fields, and image failures.");
+await writeFile("tmp/pdfs/athlete-signed-no-card.pdf", new Uint8Array(await generateParticipantPdf([signed], "test", options)));
+await writeFile("tmp/pdfs/athlete-unsigned.pdf", new Uint8Array(await generateParticipantPdf([entry(1)], "test", options)));
+console.log("Athlete PDF checks passed: signatures with missing cards, unit-independent ink thickness, missing/invalid ink, original pages, overflow, deduplication, sorting, mixed roles, empty input, oversized fields, and image failures.");

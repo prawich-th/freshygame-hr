@@ -1,3 +1,4 @@
+import { isValidSignature } from "../shared/signature";
 import { resolveSport, resolveCategories } from "./sportCatalog";
 import { correctionFieldValidator } from "./correctionValidators";
 import { normalizeInformation } from "./participantInformation";
@@ -413,6 +414,7 @@ export const updateStatus = mutation({
     const staff = await requireEditor(ctx);
     const participant = await ctx.db.get("participants", args.participantId);
     if (!participant) throw new ConvexError("Participant not found");
+    if (args.status === "verified" && !isValidSignature(participant.signature)) throw new ConvexError("The participant must sign before this record can be verified. Send a signature-only link.");
     await ctx.db.patch("participants", args.participantId, {
       status: args.status,
       ...(args.status === "verified" ? { correctionRequests: [] } : {}),

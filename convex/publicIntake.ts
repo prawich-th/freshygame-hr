@@ -285,7 +285,7 @@ export const completeUpload = mutation({
     for (const row of registrations) {
       for (const request of activeCorrections(row.correctionRequests)) {
         const field = request.field;
-        const changed = isDocumentField(field)
+        const changed = field === "signature" ? JSON.stringify(args.signature) !== JSON.stringify(row.signature) : isDocumentField(field)
           ? uploaded[field as keyof typeof uploaded] && uploaded[field as keyof typeof uploaded] !== row[field as keyof typeof uploaded]
           : String(profile[field as keyof typeof profile] ?? "").trim() !== String(row[field as keyof typeof row] ?? "").trim();
         if (!changed) throw new ConvexError(`Please correct ${CORRECTION_FIELDS[field]} before submitting`);

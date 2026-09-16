@@ -1,7 +1,7 @@
 import type { CorrectionField } from "@/shared/corrections";
 
 export const CORRECTION_FIELD_GROUPS: { title: string; fields: CorrectionField[] }[] = [
-  { title: "Documents", fields: ["profilePhotoId", "nationalIdImageId", "studentIdImageId"] },
+  { title: "Documents", fields: ["profilePhotoId", "nationalIdImageId", "studentIdImageId", "signature"] },
   { title: "Personal information", fields: ["fullNameThai", "fullNameEnglish", "nicknameThai", "nicknameEnglish", "sex", "birthDate", "nationalIdNumber"] },
   { title: "Registration", fields: ["faculty", "jerseyNumber"] },
   { title: "Contact details", fields: ["email", "lineId", "instagram", "preferredContact"] },

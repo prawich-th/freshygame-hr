@@ -78,7 +78,7 @@ export function ReviewInformationStep({ flow }: { flow: UploadFlow }) {
       <UploadError message={flow.error} />
       <div className="upload-actions upload-actions--split">
         <button type="button" className="button button--ghost" disabled={busy} onClick={flow.backToDocuments}><ArrowLeft size={16} />กลับไปเลือกเอกสาร / Back</button>
-        <button className="button button--primary" disabled={!confirmed || busy}>{busy ? "กำลังส่ง / Submitting…" : "ยืนยันและส่ง / Confirm & submit"}</button>
+        <button className="button button--primary" disabled={!confirmed || !flow.signatureReady || busy}>{busy ? "กำลังส่ง / Submitting…" : "ยืนยันและส่ง / Confirm & submit"}</button>
       </div>
     </form>
   </>;

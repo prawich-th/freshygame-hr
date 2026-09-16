@@ -1,3 +1,4 @@
+import { isValidSignature } from "../shared/signature";
 import { ConvexError } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -30,12 +31,14 @@ export async function linkDocuments(ctx: MutationCtx, participant: Doc<"particip
   const documents = { ...await existingDocuments(ctx, participant.studentId), ...uploaded };
   const rows = await registrationsForStudent(ctx, participant.studentId);
   for (const row of rows) {
+    const clearsSignature = Boolean(staff && (uploaded.nationalIdImageId || uploaded.studentIdImageId));
+    const signed = !clearsSignature && isValidSignature(row.signature);
     await ctx.db.patch("participants", row._id, {
       ...documents,
-      ...(staff && (uploaded.nationalIdImageId || uploaded.studentIdImageId) ? { signature: undefined, signedName: undefined, signedAt: undefined } : {}),
-      // A document upload must not replace another sport's review decision.
-      status: row.status === "verified" || row.status === "rejected" ? row.status
-        : row.fullNameThai.trim() && row.fullNameEnglish.trim() && row.faculty.trim() && completeDocuments(documents) ? staff?.booth && row._id === participant._id ? "verified" : "pending" : "incomplete",
+      ...(clearsSignature ? { signature: undefined, signedName: undefined, signedAt: undefined } : {}),
+      // Keep correction requests, but unsigned or replaced ID copies cannot pass verification.
+      status: (row.status === "verified" && signed) || row.status === "rejected" ? row.status
+        : row.fullNameThai.trim() && row.fullNameEnglish.trim() && row.faculty.trim() && completeDocuments(documents) ? staff?.booth && row._id === participant._id && signed ? "verified" : "pending" : "incomplete",
       updatedAt: Date.now(),
       ...(staff ? { updatedBy: staff.userId } : {}),
     });

@@ -17,6 +17,12 @@ const status = v.union(
 );
 
 export default defineSchema({
+  signatureRequests: defineTable({
+    token: v.string(), participantId: v.id("participants"), studentId: v.string(),
+    versions: v.array(v.object({ participantId: v.id("participants"), updatedAt: v.number(), signedAt: v.optional(v.number()) })),
+    expiresAt: v.number(), used: v.boolean(), createdBy: v.id("users"),
+  }).index("by_token", ["token"]).index("by_participantId", ["participantId"]),
+
   sportMigrations: defineTable({
     sportCode: v.string(), kind: v.union(v.literal("sport"), v.literal("category")),
     oldValue: v.string(), newValue: v.string(), affected: v.number(),

@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { CORRECTION_FIELDS, isDocumentField, type CorrectionField, type CorrectionRequest } from "@/shared/corrections";
 import { CORRECTION_FIELD_GROUPS } from "./correctionFieldGroups";
+import { isValidSignature } from "@/shared/signature";
 import { errorMessage } from "../lib/errors";
 
 export function FieldCorrectionEditor({ participant, onClose }: {
@@ -106,6 +107,7 @@ export function FieldCorrectionEditor({ participant, onClose }: {
 }
 
 function fieldValue(participant: Doc<"participants">, field: CorrectionField) {
+  if (field === "signature") return isValidSignature(participant.signature) ? "Signature on file" : "Not completed / ยังไม่ได้ลงลายมือชื่อ";
   return isDocumentField(field) ? participant[field] ? "Image on file" : "No image" : String(participant[field] || "Not provided");
 }
 

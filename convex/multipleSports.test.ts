@@ -18,6 +18,7 @@ test("imports preserve multiple sports and reimports update only the matching re
   expect(await staff.mutation(api.participants.importBatch, {participants:[participant, {...participant,sport:"BB"}]})).toEqual({created:2,updated:0});
   const rows = await t.run(ctx => ctx.db.query("participants").collect());
   const volleyball = rows.find(p => p.sport === "Volleyball")!;
+  await t.run(ctx => ctx.db.patch("participants",volleyball._id,{signature}));
   await staff.mutation(api.participants.updateStatus,{participantId:volleyball._id,status:"verified"});
   expect(await staff.mutation(api.participants.importBatch,{participants:[{...participant,sport:"VB",fullNameEnglish:"Updated"}]})).toEqual({created:0,updated:1});
   expect(await t.run(ctx => ctx.db.get("participants",volleyball._id))).toMatchObject({status:"verified",fullNameEnglish:"Updated"});
@@ -78,11 +79,11 @@ test("staff partial uploads share files and removal preserves a person's other s
     const keeper = await staff.mutation(api.participants.createParticipant,{participant:{...participant,studentId:"6909680002"}});
     const files = await uploadFiles(t);
     await staff.mutation(api.participants.completeStaffUpload,{participantId:first,...files,uploadedFromBooth:true});
-    expect(await t.run(ctx=>ctx.db.get("participants",first))).toMatchObject({...files,status:"verified"});
+    expect(await t.run(ctx=>ctx.db.get("participants",first))).toMatchObject({...files,status:"pending"});
     expect(await t.run(ctx=>ctx.db.get("participants",second))).toMatchObject({...files,status:"pending"});
     const replacement = await uploadFiles(t);
     await staff.mutation(api.participants.completeStaffUpload,{participantId:second,profilePhotoId:replacement.profilePhotoId});
-    expect(await t.run(ctx=>ctx.db.get("participants",first))).toMatchObject({...files,profilePhotoId:replacement.profilePhotoId,status:"verified"});
+    expect(await t.run(ctx=>ctx.db.get("participants",first))).toMatchObject({...files,profilePhotoId:replacement.profilePhotoId,status:"pending"});
     await staff.mutation(api.participants.keepOnlySelected,{sport:"Volleyball",keepIds:[keeper],reviewedIds:[first,keeper],confirmation:"REMOVE OTHERS"});
     await t.finishAllScheduledFunctions(()=>vi.runAllTimers());
     expect(await t.run(ctx=>ctx.db.get("participants",first))).toBeNull();
@@ -169,6 +170,9 @@ test("personal information validates dates, IDs, guardian contacts, and signatur
   const profile = {...personalInformation,fullNameThai:participant.fullNameThai,fullNameEnglish:participant.fullNameEnglish,faculty:participant.faculty,jerseyNumber:"92",medicalConditions:"None"};
   const args = {sessionId,...files,profile,confirmed:true as const,signature};
   await expect(t.mutation(api.publicIntake.completeUpload, {...args,signature:[]})).rejects.toThrow("signature");
+  await expect(t.mutation(api.publicIntake.completeUpload, {...args,signature:undefined})).rejects.toThrow("signature");
+  await expect(t.mutation(api.publicIntake.completeUpload, {...args,signature:[[{x:0,y:0}],[{x:100,y:100}]]})).rejects.toThrow("signature");
+  expect((await t.run(ctx => ctx.db.get("uploadSessions",sessionId)))?.used).toBe(false);
   await expect(t.mutation(api.publicIntake.completeUpload, {...args,signature:[[{x:0,y:0},{x:700,y:30}]]})).rejects.toThrow("signature");
   for (const birthDate of ["2099-01-01", "2007-02-30"]) await expect(t.mutation(api.publicIntake.completeUpload, {...args,profile:{...profile,birthDate}})).rejects.toThrow("date of birth");
   await expect(t.mutation(api.publicIntake.completeUpload, {...args,profile:{...profile,nationalIdNumber:"123"}})).rejects.toThrow("13 digits");
@@ -325,4 +329,14 @@ test("skipping uploads never bypasses missing documents or required information"
   const files = await uploadFiles(t);
   await t.run(ctx => ctx.db.patch("participants", id, { ...files, nationalIdNumber: "" }));
   await expect(t.mutation(api.publicIntake.completeUpload, args)).rejects.toThrow("nationalIdNumber");
+});
+
+test("self upload displays and resubmits a missing-signature correction without profile changes", async () => {
+  const { t, staff, id, verify } = await completedParticipant();
+  await staff.mutation(api.participants.setFieldCorrection, { participantId: id, field: "signature", note: "Not completed", requested: true });
+  const verified = await verify();
+  expect(verified.correctionRequests).toContainEqual({ field: "signature", note: "Not completed", status: "requested" });
+  await expect(t.mutation(api.publicIntake.completeUpload, { sessionId: verified.sessionId, confirmed: true, signature: [] })).rejects.toThrow("signature");
+  await t.mutation(api.publicIntake.completeUpload, { sessionId: verified.sessionId, confirmed: true, signature });
+  expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({ signature, status: "pending", correctionRequests: [{ field: "signature", note: "Not completed", status: "submitted" }] });
 });
