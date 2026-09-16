@@ -13,6 +13,7 @@ export function useSportCatalog() {
 export function SportCatalog() {
   const sports = useSportCatalog();
   const save = useMutation(api.sportCatalog.save);
+  const deleteCategory = useMutation(api.sportCatalog.deleteCategory);
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -21,6 +22,16 @@ export function SportCatalog() {
   const preview = useQuery(api.sportCatalog.migrationPreview, sport ? { code: sport.code } : "skip");
   const [pending, setPending] = useState<FunctionArgs<typeof api.sportCatalog.save> | null>(null);
   const [oldCategory, setOldCategory] = useState("");
+  async function removeCategory(name: string) {
+    if (!sport) return;
+    setBusy(true); setMessage("");
+    try {
+      await deleteCategory({ code: sport.code, name });
+      setFailed(false); setMessage(`Deleted unused category “${name}”.`);
+      setPending(null); setOldCategory("");
+    } catch (error) { setFailed(true); setMessage(errorMessage(error, "Delete category")); }
+    finally { setBusy(false); }
+  }
   async function apply(args: FunctionArgs<typeof api.sportCatalog.save>) {
     setBusy(true); setMessage("");
     try {
@@ -61,8 +72,12 @@ export function SportCatalog() {
           <button className="button button--primary">{busy ? "Saving…" : sport ? "Save sport" : "Create sport"}</button>
         </fieldset>
       </form>
-      {sport && <><h3>Migrate an old category</h3><p>Choose an existing value, including categories from older imports. Enter a new name or an existing category to combine them.</p><form className="sport-catalog__event" onSubmit={e => void submit(e, oldCategory, true)}><label className="field">Old value<select className="select" required value={oldCategory} disabled={busy || !preview} onChange={e => setOldCategory(e.target.value)}><option value="">Choose old category</option>{preview?.categories.map(c => <option key={c.name} value={c.name}>{c.name} ({c.participants} registrations)</option>)}</select></label><label className="field">New value<input className="input" name="category" required maxLength={100} list="migration-targets" disabled={busy}/><datalist id="migration-targets">{sport.types.map(name => <option key={name} value={name}/>)}</datalist></label><button className="button button--primary" disabled={busy || !oldCategory}>Preview migration</button></form><h3>Event categories</h3><p>Categories belong to this sport. The same category name in another sport is unaffected.</p>
-        {sport.events.map(event => <form key={`${sport.code}:${event.name}`} className="sport-catalog__event" onSubmit={e => void submit(e, event.name, true)}><label className="field">Category name<input aria-label={`Rename ${event.name}`} className="input" name="category" required maxLength={100} disabled={busy} defaultValue={event.name}/></label><button className="button button--soft" disabled={busy}>Save category</button></form>)}
+      {sport && <><h3>Migrate an old category</h3><p>Choose an existing value, including categories from older imports. Enter a new name or an existing category to combine them.</p><form className="sport-catalog__event" onSubmit={e => void submit(e, oldCategory, true)}><label className="field">Old value<select className="select" required value={oldCategory} disabled={busy || !preview} onChange={e => setOldCategory(e.target.value)}><option value="">Choose old category</option>{preview?.categories.map(c => <option key={c.name} value={c.name}>{c.name} ({c.participants} registrations)</option>)}</select></label><label className="field">New value<input className="input" name="category" required maxLength={100} list="migration-targets" disabled={busy}/><datalist id="migration-targets">{sport.types.map(name => <option key={name} value={name}/>)}</datalist></label><button className="button button--primary" disabled={busy || !oldCategory}>Preview migration</button></form><h3>Event categories</h3><p>Categories belong to this sport. The same category name in another sport is unaffected. Only unused categories can be deleted; migrate linked participants first.</p>
+        {sport.events.map(event => {
+          const names = new Set([event.name, ...event.aliases].map(name => name.trim().toLowerCase()));
+          const inUse = preview?.categories.some(c => names.has(c.name.trim().toLowerCase()) && c.participants > 0);
+          return <form key={`${sport.code}:${event.name}`} className="sport-catalog__event" onSubmit={e => void submit(e, event.name, true)}><label className="field">Category name<input aria-label={`Rename ${event.name}`} className="input" name="category" required maxLength={100} disabled={busy} defaultValue={event.name}/></label><button className="button button--soft" disabled={busy}>Save category</button><button type="button" className="button button--danger" disabled={busy || !preview || inUse} aria-label={`Delete ${event.name}`} title={inUse ? "Migrate linked participants before deleting" : "Delete unused category"} onClick={() => void removeCategory(event.name)}>Delete</button></form>;
+        })}
         <form key={sport.code} className="sport-catalog__event" onSubmit={e => void submit(e, undefined, true)}><label className="field">New category<input className="input" name="category" required maxLength={100} disabled={busy} placeholder="e.g. Mixed Doubles"/></label><button className="button button--primary" disabled={busy}>Add category</button></form>
         <h3>Migration history</h3>{preview?.history.length ? <div style={{overflowX: "auto"}}><table className="staff-list"><thead><tr><th>Old value</th><th>New value</th><th>Records updated</th><th>Applied</th></tr></thead><tbody>{preview.history.map(row => <tr key={row._id}><td>{row.oldValue}</td><td>{row.newValue}</td><td>{row.affected}</td><td>{new Date(row.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p>No migrations yet.</p>}
       </>}

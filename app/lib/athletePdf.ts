@@ -164,8 +164,11 @@ export async function generateAthletePdf(entries: ParticipantPdfEntry[], options
         const left = (WIDTH - width) / 2, top = 565 + (170 - height) / 2;
         pdf.addImage(card, left, top, width, height);
         pdf.setDrawColor(30); pdf.setLineWidth(0.8);
-        pdf.line(left + width * 0.12, top + height, left + width * 0.78, top);
-        pdf.line(left + width * 0.22, top + height, left + width * 0.88, top);
+        // Continue both strokes beyond the card while preserving their diagonal angle.
+        const overhang = 8;
+        const horizontalOverhang = overhang * width * 0.66 / height;
+        pdf.line(left + width * 0.12 - horizontalOverhang, top + height + overhang, left + width * 0.78 + horizontalOverhang, top - overhang);
+        pdf.line(left + width * 0.22 - horizontalOverhang, top + height + overhang, left + width * 0.88 + horizontalOverhang, top - overhang);
         pdf.setFontSize(17);
         pdf.text("สำเนาถูกต้อง", WIDTH / 2, 752, { align: "center" });
         pdf.setFontSize(14);

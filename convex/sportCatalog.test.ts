@@ -53,3 +53,36 @@ test("migrations reject unauthorized users, collisions and stale changes without
   expect((await staff.query(api.sportCatalog.list)).find(s => s.code === "SW")?.name).toBe("Aquatics");
   expect((await staff.query(api.sportCatalog.migrationPreview, { code: "SW" })).history).toHaveLength(1);
 });
+
+test("unused default categories stay deleted, including the last category, with an audit entry", async () => {
+  const { t, staff } = await setup();
+  await staff.mutation(api.sportCatalog.deleteCategory, { code: "VB", name: "Team" });
+  expect((await staff.query(api.sportCatalog.list)).find(s => s.code === "VB")?.events).toEqual([]);
+  expect((await staff.query(api.sportCatalog.list)).find(s => s.code === "BB")?.types).toContain("Team");
+  expect(await t.run(ctx => ctx.db.query("auditEvents").collect())).toEqual(expect.arrayContaining([expect.objectContaining({ action: "sport_category_deleted:VB:Team" })]));
+  await expect(staff.mutation(api.sportCatalog.deleteCategory, { code: "VB", name: "Team" })).rejects.toThrow("not found");
+});
+
+test("deletion rejects categories used through canonical or historical names, even after a stale preview", async () => {
+  const { t, staff } = await setup();
+  await staff.mutation(api.sportCatalog.save, { code: "SW", expectedName: "Swimming", name: "Aquatics", thai: "", category: { oldName: "50 m Freestyle", name: "Freestyle" } });
+  expect((await staff.query(api.sportCatalog.migrationPreview, { code: "SW" })).participants).toBe(0);
+  const id = await t.run(ctx => ctx.db.insert("participants", { ...person, sport: "SW", category: " 50 M FREESTYLE ", source: "import", status: "incomplete", updatedAt: 1 }));
+  await expect(staff.mutation(api.sportCatalog.deleteCategory, { code: "SW", name: "Freestyle" })).rejects.toThrow("used by participants");
+  await t.run(ctx => ctx.db.patch("participants", id, { sport: "Aquatics", categories: ["50 m Backstroke", "Freestyle"] }));
+  await expect(staff.mutation(api.sportCatalog.deleteCategory, { code: "SW", name: "Freestyle" })).rejects.toThrow("used by participants");
+  await t.run(ctx => ctx.db.patch("participants", id, { category: "50 m Backstroke", categories: ["50 m Backstroke"] }));
+  await staff.mutation(api.sportCatalog.deleteCategory, { code: "SW", name: "Freestyle" });
+  expect((await staff.query(api.sportCatalog.list)).find(s => s.code === "SW")?.types).not.toContain("Freestyle");
+  expect((await staff.query(api.sportCatalog.migrationPreview, { code: "SW" })).history).toHaveLength(2);
+});
+
+test("only administrators may delete unused categories", async () => {
+  const { t } = await setup();
+  const args = { code: "SW", name: "50 m Freestyle" };
+  await expect(t.mutation(api.sportCatalog.deleteCategory, args)).rejects.toThrow("Authentication");
+  for (const role of ["viewer", "registrar", "co-sport"] as const) {
+    const id = await t.run(ctx => ctx.db.insert("users", { role, active: true }));
+    await expect(t.withIdentity({ subject: `${id}|session` }).mutation(api.sportCatalog.deleteCategory, args)).rejects.toThrow("Administrator");
+  }
+});

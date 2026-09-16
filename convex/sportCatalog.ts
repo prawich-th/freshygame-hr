@@ -120,3 +120,27 @@ export const save = mutation({
     return affected;
   },
 });
+
+export const deleteCategory = mutation({
+  args: { code: v.string(), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { code, name }) => {
+    const staff = await requireAdmin(ctx);
+    const sport = (await catalog(ctx)).find(s => s.code === code);
+    const category = sport?.events.find(e => e.name === name);
+    if (!sport || !category) throw new ConvexError("Category not found. Refresh and try again.");
+    // Check canonical and historical category names in the same transaction as deletion.
+    const rows = await linkedParticipants(ctx, sport);
+    if (rows.some(p => resolveCategories(sport, participantCategories(p)).includes(name))) {
+      throw new ConvexError("This category is used by participants. Migrate them to another category before deleting it.");
+    }
+    const { code: sportCode, name: sportName, thai, aliases } = sport;
+    const updated = { code: sportCode, name: sportName, thai, aliases, events: sport.events.filter(e => e.name !== name) };
+    const stored = await ctx.db.query("sportCatalog").withIndex("by_code", q => q.eq("code", code)).unique();
+    // Persist overrides even for defaults, including deletion of the last category.
+    if (stored) await ctx.db.patch("sportCatalog", stored._id, updated);
+    else await ctx.db.insert("sportCatalog", updated);
+    await ctx.db.insert("auditEvents", { action: `sport_category_deleted:${code}:${name}`, ipAddress: "authenticated-staff-session", staffUserId: staff.userId, successful: true, attempts: 1, createdAt: Date.now() });
+    return null;
+  },
+});
