@@ -724,3 +724,5 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
   .record-signature-request__body { padding: 16px; }
   .record-signature-request__controls { flex-direction: column; align-items: stretch; }
 }
+
+.participant-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

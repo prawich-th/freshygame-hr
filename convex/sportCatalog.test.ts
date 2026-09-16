@@ -27,14 +27,14 @@ test("sport and category migrations update linked registrations, history and sta
   expect((await t.run(ctx => ctx.db.query("participants").collect())).filter(p => p.sport === "Aquatics")).toHaveLength(2);
 });
 
-test("legacy category migration merges into an existing category and clears signatures", async () => {
+test("legacy category migration merges into an existing category and preserves signatures", async () => {
   const { t, staff } = await setup();
   const id = await t.run(ctx => ctx.db.insert("participants", { ...person, category: "Old freestyle", categories: ["Old freestyle", "50 m Freestyle"], source: "import", status: "verified", updatedAt: 1, signedName: "Test", signedAt: 1, signature: [[{ x: 1, y: 1 }]] }));
   expect((await staff.query(api.sportCatalog.migrationPreview, { code: "SW" })).categories).toContainEqual({ name: "Old freestyle", participants: 1 });
   await staff.mutation(api.sportCatalog.save, { code: "SW", expectedName: "Swimming", name: "Swimming", thai: "ว่ายน้ำ", category: { oldName: "Old freestyle", name: "50 m Freestyle" } });
   const row = await t.run(ctx => ctx.db.get("participants", id));
   expect(row?.categories).toEqual(["50 m Freestyle"]);
-  expect(row?.signature).toBeUndefined();
+  expect(row).toMatchObject({ signature: [[{ x: 1, y: 1 }]], signedName: "Test", signedAt: 1 });
   await staff.mutation(api.participants.importBatch, { participants: [{ ...person, category: "Old freestyle" }] });
   expect((await t.run(ctx => ctx.db.get("participants", id)))?.categories).toEqual(["50 m Freestyle"]);
 });

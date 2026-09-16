@@ -36,7 +36,7 @@ export function SportCatalog() {
     setBusy(true); setMessage("");
     try {
       const affected = await save(args);
-      setFailed(false); setMessage(`Saved. ${affected} linked registration${affected === 1 ? "" : "s"} updated together.${affected ? " Affected participants must sign their updated information again." : ""}`);
+      setFailed(false); setMessage(`Saved. ${affected} linked registration${affected === 1 ? "" : "s"} updated together.`);
       setSelected(args.code.trim().toUpperCase()); setPending(null); setOldCategory("");
     } catch (error) { setFailed(true); setMessage(errorMessage(error, "Save sport catalog")); }
     finally { setBusy(false); }

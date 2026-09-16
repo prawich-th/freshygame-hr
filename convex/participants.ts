@@ -87,6 +87,7 @@ const listItem = v.object({
   categories: v.array(v.string()),
   status: v.union(v.literal("incomplete"), v.literal("pending"), v.literal("verified"), v.literal("rejected")),
   hasNationalId: v.boolean(),
+  hasSignature: v.boolean(),
   photoUrl: v.union(v.string(), v.null()),
   updatedAt: v.number(),
 });
@@ -169,6 +170,7 @@ export const list = query({
           categories: participantCategories(participant),
           status: participant.status,
           hasNationalId: Boolean(participant.nationalIdImageId),
+          hasSignature: isValidSignature(participant.signature),
           photoUrl: participant.profilePhotoId
             ? await ctx.storage.getUrl(participant.profilePhotoId)
             : null,
@@ -545,7 +547,6 @@ export const updateParticipant = mutation({
       instagram: args.instagram?.trim().replace(/^@/, "") || undefined,
       preferredContact: args.preferredContact?.trim() || undefined,
       ...normalizeInformation(args),
-      signature: undefined, signedName: undefined, signedAt: undefined,
       updatedAt: Date.now(),
       updatedBy: staff.userId,
     });

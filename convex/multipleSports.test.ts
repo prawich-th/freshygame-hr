@@ -91,6 +91,33 @@ test("staff partial uploads share files and removal preserves a person's other s
     await t.run(async ctx => { expect(await ctx.storage.get(files.nationalIdImageId)).not.toBeNull(); });
   } finally { vi.useRealTimers(); }
 });
+test("participant rows expose signature validity without exposing signature data", async () => {
+  const {t,staff} = await setup();
+  const id = await staff.mutation(api.participants.createParticipant,{participant});
+  const viewerId = await t.run(ctx => ctx.db.insert("users",{role:"viewer",active:true}));
+  const viewer = t.withIdentity({subject:`${viewerId}|session`});
+  for (const [ink, expected] of [[undefined,false], [[],false], [[[{x:1,y:1}]],false], [signature,true]] as const) {
+    await t.run(ctx => ctx.db.patch("participants",id,{signature:ink ? ink.map(stroke => stroke.map(point => ({...point}))) : undefined}));
+    const {page} = await viewer.query(api.participants.list,{paginationOpts:{numItems:10,cursor:null}});
+    expect(page[0].hasSignature).toBe(expected);
+    expect(page[0]).not.toHaveProperty("signature");
+    expect(page[0]).not.toHaveProperty("signedName");
+  }
+});
+test("profile edits preserve certification while Student ID reassignment clears it", async () => {
+  const {t,staff} = await setup();
+  const id = await staff.mutation(api.participants.createParticipant,{participant});
+  const certification = {signature, signedName:participant.fullNameThai, signedAt:123};
+  await t.run(ctx => ctx.db.patch("participants",id,certification));
+  const edit = {...participant,participantId:id,participantKind:"athlete" as const,faculty:"คณะแพทยศาสตร์" as const,fullNameThai:"ชื่อแก้ไข",phone:"0898765432",jerseyNumber:"12",medicalConditions:"None",sport:"Basketball",category:"Team"};
+  await staff.mutation(api.participants.updateParticipant,edit);
+  expect(await t.run(ctx => ctx.db.get("participants",id))).toMatchObject({...certification,fullNameThai:edit.fullNameThai,phone:edit.phone,jerseyNumber:"12",sport:"Basketball"});
+  await staff.mutation(api.participants.updateParticipant,{...edit,studentId:"6909680002"});
+  const reassigned = await t.run(ctx => ctx.db.get("participants",id));
+  expect(reassigned?.signature).toBeUndefined();
+  expect(reassigned?.signedName).toBeUndefined();
+  expect(reassigned?.signedAt).toBeUndefined();
+});
 test("self upload cannot follow a registration reassigned to another Student ID", async () => {
   const {t,staff} = await setup();
   const id = await staff.mutation(api.participants.createParticipant,{participant});

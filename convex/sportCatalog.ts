@@ -108,7 +108,7 @@ export const save = mutation({
       if (participantKind(p) !== "athlete") continue;
       const categories = resolveCategories({ ...updated, types: events.map(e => e.name) }, participantCategories(p));
       if (p.sport === name && JSON.stringify(categories) === JSON.stringify(participantCategories(p))) continue;
-      await ctx.db.patch("participants", p._id, { sport: name, categories, category: categories[0], updatedAt: Date.now(), updatedBy: staff.userId, signature: undefined, signedName: undefined, signedAt: undefined });
+      await ctx.db.patch("participants", p._id, { sport: name, categories, category: categories[0], updatedAt: Date.now(), updatedBy: staff.userId });
       affected++;
     }
     if (old && old.name !== name) await ctx.db.insert("sportMigrations", { sportCode: code, kind: "sport", oldValue: old.name, newValue: name, affected, createdAt: Date.now(), createdBy: staff.userId });
