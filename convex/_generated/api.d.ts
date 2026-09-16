@@ -18,6 +18,7 @@ import type * as participantDocuments from "../participantDocuments.js";
 import type * as participantInformation from "../participantInformation.js";
 import type * as participants from "../participants.js";
 import type * as publicIntake from "../publicIntake.js";
+import type * as recordSync from "../recordSync.js";
 import type * as signatureRequests from "../signatureRequests.js";
 import type * as signatures from "../signatures.js";
 import type * as sportCatalog from "../sportCatalog.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   participantInformation: typeof participantInformation;
   participants: typeof participants;
   publicIntake: typeof publicIntake;
+  recordSync: typeof recordSync;
   signatureRequests: typeof signatureRequests;
   signatures: typeof signatures;
   sportCatalog: typeof sportCatalog;
