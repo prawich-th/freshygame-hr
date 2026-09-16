@@ -27,11 +27,12 @@ export async function existingDocuments(ctx: QueryCtx, studentId: string): Promi
   return documents;
 }
 
-export async function linkDocuments(ctx: MutationCtx, participant: Doc<"participants">, uploaded: Documents, staff?: { userId: Doc<"users">["_id"]; booth?: boolean }) {
+export async function linkDocuments(ctx: MutationCtx, participant: Doc<"participants">, uploaded: Documents, staff?: { userId: Doc<"users">["_id"]; booth?: boolean; imageEdit?: { field: keyof Documents; originalId: Doc<"participants">["nationalIdImageId"] } }) {
   const documents = { ...await existingDocuments(ctx, participant.studentId), ...uploaded };
   const rows = await registrationsForStudent(ctx, participant.studentId);
   for (const row of rows) {
-    const clearsSignature = Boolean(staff && (uploaded.nationalIdImageId || uploaded.studentIdImageId));
+    const editsSameImage = staff?.imageEdit && row[staff.imageEdit.field] === staff.imageEdit.originalId;
+    const clearsSignature = Boolean(staff && !editsSameImage && (uploaded.nationalIdImageId || uploaded.studentIdImageId));
     const signed = !clearsSignature && isValidSignature(row.signature);
     await ctx.db.patch("participants", row._id, {
       ...documents,

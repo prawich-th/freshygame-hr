@@ -5,10 +5,9 @@ import { Crop, RotateCcw, RotateCw } from "lucide-react";
 
 type CropArea = {x: number; y: number; width: number; height: number};
 
-export function RotatableDocumentPreview({label, url, disabled, onSave, clearsSignature = false}: {
+export function RotatableDocumentPreview({label, url, disabled, onSave}: {
   label: string; url: string; disabled: boolean;
   onSave: (file: File) => Promise<void>;
-  clearsSignature?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dragStart = useRef<{x: number; y: number; pointerId: number} | null>(null);
@@ -94,7 +93,7 @@ export function RotatableDocumentPreview({label, url, disabled, onSave, clearsSi
       {dirty && <><button type="button" className="button button--primary" disabled={locked} onClick={()=>void save()}>{saving?"Saving…":"Save changes"}</button><button type="button" className="button button--ghost" disabled={locked} onClick={()=>{setTurns(0);setCrop(null);setCropping(false);setError("");}}>Cancel</button></>}
     </div>
     {cropping && <p className="image-editor__hint">Drag over the image to keep only the selected area. Keep all ID details visible. Rotating resets the crop.</p>}
-    {dirty && <p className="image-editor__hint">Changes are not saved yet. {clearsSignature && "Saving this ID image clears the saved signature; the participant must sign again."}</p>}
+    {dirty && <p className="image-editor__hint">Changes are not saved yet. Cropping and rotating preserve the saved signature.</p>}
     {error && <p role="alert" className="notice notice--error">{error}</p>}
   </div>;
 }

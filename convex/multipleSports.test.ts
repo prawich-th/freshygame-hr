@@ -367,3 +367,25 @@ test("self upload displays and resubmits a missing-signature correction without 
   await t.mutation(api.publicIntake.completeUpload, { sessionId: verified.sessionId, confirmed: true, signature });
   expect(await t.run(ctx => ctx.db.get("participants", id))).toMatchObject({ signature, status: "pending", correctionRequests: [{ field: "signature", note: "Not completed", status: "submitted" }] });
 });
+
+test("crop and rotation edits preserve certification across linked registrations; replacements still clear it", async () => {
+  const {t,staff} = await setup();
+  const first = await staff.mutation(api.participants.createParticipant,{participant});
+  const second = await staff.mutation(api.participants.createParticipant,{participant:{...participant,sport:"Basketball"}});
+  const files = await uploadFiles(t);
+  const certification = {signature,signedName:participant.fullNameThai,signedAt:123};
+  for(const id of [first,second]) await t.run(ctx=>ctx.db.patch("participants",id,{...files,...certification,status:"verified"}));
+  for(const field of ["profilePhotoId","nationalIdImageId","studentIdImageId"] as const) {
+    const edited = await t.run(ctx=>ctx.storage.store(new Blob(["edited"])));
+    await staff.mutation(api.participants.completeStaffUpload,{participantId:first,[field]:edited,imageEdit:{field,originalId:files[field]}});
+    for(const id of [first,second]) expect(await t.run(ctx=>ctx.db.get("participants",id))).toMatchObject({...certification,[field]:edited,status:"verified"});
+    await expect(staff.mutation(api.participants.completeStaffUpload,{participantId:first,[field]:edited,imageEdit:{field,originalId:files[field]}})).rejects.toThrow("image changed");
+  }
+  await staff.mutation(api.participants.completeStaffUpload,{participantId:first,nationalIdImageId:files.nationalIdImageId});
+  for(const id of [first,second]) {
+    const row = await t.run(ctx=>ctx.db.get("participants",id));
+    expect(row?.signature).toBeUndefined();
+    expect(row?.signedAt).toBeUndefined();
+    expect(row?.status).toBe("pending");
+  }
+});

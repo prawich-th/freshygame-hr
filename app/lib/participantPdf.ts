@@ -214,12 +214,12 @@ async function generateLegacyParticipantPdf(
     textBox(pdf, "การรับรองข้อมูลและสำเนา", signatureX + 2, imageY + 1, signatureWidth - 4, 8, 15, true, "center");
     textBox(pdf, "ขอรับรองว่าเป็นความจริงทุกประการ", signatureX + 3, 202, signatureWidth - 6, 12, 14, false, "center");
     textBox(pdf, "สำเนาถูกต้อง\nใช้สำหรับการแข่งขันกีฬา\nTU Freshy Games 2026", signatureX + 3, 215, signatureWidth - 6, 19, 14, false, "center");
-    drawSignature(pdf, participant, 140, 237, 51, 16);
+    const renderedSignature = drawSignature(pdf, participant, 140, 237, 51, 16);
     pdf.setDrawColor(175, 175, 175); pdf.setLineWidth(0.15);
     pdf.line(signatureX + 6, 255, signatureX + signatureWidth - 6, 255);
-    textBox(pdf, `(${participant.signedName || participant.fullNameThai || "-"})`, signatureX + 2, 257, signatureWidth - 4, 9, 14, false, "center");
-    textBox(pdf, participant.signature?.length ? "ผู้สมัคร / ผู้รับรองสำเนา" : "ยังไม่ได้ลงลายมือชื่อ", signatureX + 2, 266, signatureWidth - 4, 7, 13, false, "center");
-    const signedDate = participant.signedAt ? new Date(participant.signedAt).toLocaleDateString("th-TH", {timeZone: "Asia/Bangkok"}) : "";
+    textBox(pdf, `(${(renderedSignature ? participant.signedName : undefined) || participant.fullNameThai || participant.fullNameEnglish || "-"})`, signatureX + 2, 257, signatureWidth - 4, 9, 14, false, "center");
+    textBox(pdf, "ผู้สมัคร / ผู้รับรองสำเนา", signatureX + 2, 266, signatureWidth - 4, 7, 13, false, "center");
+    const signedDate = renderedSignature && participant.signedAt ? new Date(participant.signedAt).toLocaleDateString("th-TH", {timeZone: "Asia/Bangkok"}) : "";
     if (signedDate) textBox(pdf, signedDate, signatureX + 2, 273, signatureWidth - 4, 7, 13, false, "center");
     textBox(pdf, "ออกโดยกองอำนวยการคณะสีน้ำตาล", 14, 283, 182, 7, 13, false, "center");
   }

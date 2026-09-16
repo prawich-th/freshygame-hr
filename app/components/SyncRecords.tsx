@@ -7,7 +7,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { errorMessage } from "../lib/errors";
 
-export function SyncRecords() {
+export function useRecordSync() {
   const sync = useMutation(api.recordSync.batch);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -32,8 +32,8 @@ export function SyncRecords() {
     } catch (error) { setFailed(true); setMessage(`${checked} records checked · ${updated} records updated. ${errorMessage(error, "Sync records")} You can run sync again to continue checking.`); }
     finally { setBusy(false); }
   }
-  return <div className="record-sync">
-    <button type="button" className="button button--soft" disabled={busy} onClick={() => void run()} title="Check all registrations and fill missing photos, files, and signatures from matching Student IDs"><RefreshCw size={15} />{busy ? "Syncing records…" : "Check & sync records"}</button>
-    {message && <div className={`notice ${failed ? "notice--error" : "notice--info"}`} role="status">{message}{conflicts.length > 0 && <p>Review needed for {conflicts.length} Student IDs (conflicting files/signatures, missing files, or open corrections): {conflicts.join(", ")}. These records were left unchanged.</p>}</div>}
-  </div>;
+  return {
+    button: <button type="button" className="button button--soft" disabled={busy} onClick={() => void run()} title="Check all registrations and fill missing photos, files, and signatures from matching Student IDs"><RefreshCw size={15} />{busy ? "Syncing records…" : "Check & sync records"}</button>,
+    notice: message ? <div className={`notice ${failed ? "notice--error" : "notice--info"}`} role="status" style={{ margin: "12px 18px", overflowWrap: "anywhere" }}>{message}{conflicts.length > 0 && <p>Review needed for {conflicts.length} Student IDs (conflicting files/signatures, missing files, or open corrections): {conflicts.join(", ")}. These records were left unchanged.</p>}</div> : null,
+  };
 }

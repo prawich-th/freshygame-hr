@@ -1,6 +1,6 @@
 "use client";
 
-import { SyncRecords } from "./SyncRecords";
+import { useRecordSync } from "./SyncRecords";
 import { RequestSignatureLink } from "./RequestSignatureLink";
 import { SignaturePreview } from "./SignaturePreview";
 import { ParticipantRecordDetails } from "./ParticipantRecordDetails";
@@ -151,6 +151,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
 
 function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { stats: { total:number;complete:number;pending:number;sports:number } | undefined; selectedId: Id<"participants"> | null; setSelectedId:(id:Id<"participants">|null)=>void; canEdit:boolean }) {
   const { results, status, loadMore } = usePaginatedQuery(api.participants.list, {}, { initialNumItems: 50 });
+  const recordSync = useRecordSync();
   const convex = useConvex();
   const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all"); const [faculty, setFaculty] = useState(""); const [sport, setSport] = useState(""); const [filterOpen,setFilterOpen]=useState(false); const [autoLoadingFilters,setAutoLoadingFilters]=useState(false); const [draftFilter,setDraftFilter]=useState("all"); const [draftFaculty,setDraftFaculty]=useState(""); const [draftSport,setDraftSport]=useState(""); const [exporting,setExporting]=useState(false); const [selectedIds,setSelectedIds]=useState<Set<Id<"participants">>>(new Set()); const [exportError,setExportError]=useState("");
   const faculties = useMemo(() => [...new Set(results.map(p=>p.faculty).filter(Boolean))].sort(), [results]);
@@ -174,8 +175,8 @@ function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { s
     <div className="stats-grid">
       <Stat label="All participants" value={stats?.total} icon={UsersRound}/><Stat label="Verified" value={stats?.complete} icon={BadgeCheck}/><Stat label="Awaiting review" value={stats?.pending} icon={Activity}/><Stat label="Activities" value={stats?.sports} icon={CircleGauge}/>
     </div>
-    <section className="panel"><div className="panel__head"><h2>Participant records</h2><div className="filters"><div className="search-wrap"><Search size={14}/><input className="input input--search" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name or student ID"/></div><button className="button button--soft filter-trigger" aria-haspopup="dialog" aria-expanded={filterOpen} onClick={openFilters}><ListFilter size={15}/> Filters{activeFilterCount>0&&<span className="filter-count">{activeFilterCount}</span>}</button>{sport&&<button className="button button--soft" disabled={exporting} onClick={()=>void exportSelectedSport()}>{exporting?<span className="spinner" style={{color:"#4b2f25"}}/>:<Download size={14}/>} Sport forms PDF</button>}{selectedIds.size>0&&<button className="button button--primary" disabled={exporting} onClick={()=>void exportBulk()}>{exporting?<span className="spinner"/>:<Download size={14}/>} Personal forms PDF ({selectedIds.size})</button>}{selectedIds.size>0&&<button className="icon-button" title="Clear selection" onClick={()=>setSelectedIds(new Set())}><X size={14}/></button>}</div></div>
-      {canEdit && <SyncRecords />}
+    <section className="panel"><div className="panel__head"><h2>Participant records</h2><div className="filters"><div className="search-wrap"><Search size={14}/><input className="input input--search" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name or student ID"/></div><button className="button button--soft filter-trigger" aria-haspopup="dialog" aria-expanded={filterOpen} onClick={openFilters}><ListFilter size={15}/> Filters{activeFilterCount>0&&<span className="filter-count">{activeFilterCount}</span>}</button>{canEdit && recordSync.button}{sport&&<button className="button button--soft" disabled={exporting} onClick={()=>void exportSelectedSport()}>{exporting?<span className="spinner" style={{color:"#4b2f25"}}/>:<Download size={14}/>} Sport forms PDF</button>}{selectedIds.size>0&&<button className="button button--primary" disabled={exporting} onClick={()=>void exportBulk()}>{exporting?<span className="spinner"/>:<Download size={14}/>} Personal forms PDF ({selectedIds.size})</button>}{selectedIds.size>0&&<button className="icon-button" title="Clear selection" onClick={()=>setSelectedIds(new Set())}><X size={14}/></button>}</div></div>
+      {canEdit && recordSync.notice}
       {exportError&&<div className="notice notice--error bulk-export-notice">{exportError}</div>}
       <div style={{overflowX:"auto"}}><table className="data-table"><thead><tr><th className="selection-cell"><input type="checkbox" aria-label="Select all filtered participants" checked={allVisibleSelected} onChange={toggleVisible}/></th><th>Participant</th><th>Student ID</th><th>Role</th><th>Faculty</th><th>Sport / Performance</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>{visible.map((p) => <tr key={p._id} onClick={() => setSelectedId(p._id)}><td className="selection-cell" onClick={event=>event.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.fullNameEnglish}`} checked={selectedIds.has(p._id)} onChange={()=>toggleParticipant(p._id)}/></td><td><div className="person-cell">{p.photoUrl ? <img className="person-cell__avatar" src={p.photoUrl} alt=""/> : <span className="person-cell__avatar">{initials(p.fullNameEnglish)}</span>}<div><strong>{p.fullNameThai || p.fullNameEnglish || "Incomplete profile"}</strong><span>{p.fullNameEnglish || p.studentId}</span></div></div></td><td>{p.studentId}</td><td><span className={`pill ${p.participantKind === "performer" ? "pill--cream" : "pill--gray"}`}>{kindLabel[participantKind(p)]}</span></td><td>{p.faculty}</td><td>{p.sport}</td><td>{categoryLabel(p) || "—"}</td><td><div className="participant-status"><span className={`pill ${statusClass[p.status]}`}>{statusLabel[p.status]}</span>{!p.hasSignature && (canEdit ? <RequestSignatureLink key={`${p._id}-${p.updatedAt}`} participantId={p._id} compact /> : <span className="pill pill--amber">Missing signature</span>)}</div></td><td><ChevronRight size={14}/></td></tr>)}{!visible.length && <tr><td colSpan={9} className="empty-state">No matching participants</td></tr>}</tbody></table></div>
       {autoLoadingFilters&&status!=="Exhausted"?<div className="filter-loading"><span className="spinner"/> Loading all participants for this filter…</div>:status === "CanLoadMore"&&<div style={{padding:15,textAlign:"center"}}><button className="button button--ghost" onClick={() => loadMore(50)}>Load more</button></div>}
@@ -222,9 +223,12 @@ function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; on
       const response = await fetch(uploadUrl, {method:"POST",headers:{"Content-Type":rotated.type},body:rotated});
       if (!response.ok) throw new UserFacingError("Image upload failed");
       const storageId = (await response.json()).storageId as Id<"_storage">;
-      await completeUpload({participantId:id, ...(kind === "profile" ? {profilePhotoId:storageId} : kind === "nationalId" ? {nationalIdImageId:storageId} : {studentIdImageId:storageId})});
+      const field = kind === "profile" ? "profilePhotoId" : kind === "nationalId" ? "nationalIdImageId" : "studentIdImageId";
+      const originalId = p[field];
+      if (!originalId) throw new UserFacingError("Reopen the record before editing this image.");
+      await completeUpload({participantId:id, imageEdit: {field, originalId}, ...(kind === "profile" ? {profilePhotoId:storageId} : kind === "nationalId" ? {nationalIdImageId:storageId} : {studentIdImageId:storageId})});
       setMessageIsError(false);
-      setMessage(kind === "profile" ? "Photo changes saved for all registrations with this Student ID." : "ID changes saved for all registrations with this Student ID. Please ask the participant to sign the corrected copies again.");
+      setMessage(kind === "profile" ? "Photo changes saved for all registrations with this Student ID." : "ID changes saved for all registrations with this Student ID. Existing signatures for this image were preserved.");
       setPdfState("idle");
     } catch (error) {
       setMessageIsError(true); setMessage(errorMessage(error, "Save image changes"));
@@ -255,7 +259,7 @@ function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; on
       ["Profile photo", "profile", detail.photoUrl],
       ["National ID card", "nationalId", detail.nationalIdImageUrl],
       ["Student ID card", "studentId", detail.studentIdImageUrl],
-    ] as const).map(([label, kind, url]) => canEdit && url ? <RotatableDocumentPreview key={`${kind}-${url}`} label={label} url={url} disabled={busy || editing || pdfState === "loading"} clearsSignature={kind !== "profile" && Boolean(p.signature?.length)} onSave={file => saveImageEdit(file, kind)}/> : <DocumentPreview key={kind} label={label} url={url}/>)}</div>
+    ] as const).map(([label, kind, url]) => canEdit && url ? <RotatableDocumentPreview key={`${kind}-${url}`} label={label} url={url} disabled={busy || editing || pdfState === "loading"} onSave={file => saveImageEdit(file, kind)}/> : <DocumentPreview key={kind} label={label} url={url}/>)}</div>
     </section>
     {canEdit && <RequestSignatureLink participantId={id} disabled={busy || editing} />}
     {canEdit && <SignaturePreview signature={p.signature} signedName={p.signedName} signedAt={p.signedAt} />}

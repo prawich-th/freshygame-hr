@@ -737,4 +737,4 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
   .input { min-width: 0; width: 100%; font-size: 11px; }
 }
 
-.record-sync { padding: 0 20px 16px; .notice { margin-top: 12px; } .notice p { margin: 8px 0 0; overflow-wrap: anywhere; } }
+.panel__head .filters { flex-wrap: wrap; }

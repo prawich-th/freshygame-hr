@@ -154,35 +154,38 @@ export async function generateAthletePdf(entries: ParticipantPdfEntry[], options
       const other = [p.foodAllergies && `แพ้อาหาร: ${p.foodAllergies}`, p.allergies && `ข้อมูลการแพ้เดิม: ${p.allergies}`, p.qualificationDetails, p.eligibilityCertification].filter(Boolean).join(" / ");
       field(pdf, other, 99, 512, 422);
       const documentEntry = registrations.find(entry => entry.studentIdImageUrl);
-      field(pdf, "บัตรนักศึกษา", 258, 548, 100, 15);
+      field(pdf, "บัตรนักศึกษา", 100, 548, 130, 15);
       if (documentEntry) {
         const card = await imageData(documentEntry.studentIdImageUrl);
         if (!card) throw new Error(`Could not load the student ID card for ${p.studentId}. Please retry.`);
         const image = pdf.getImageProperties(card);
-        const scale = Math.min(270 / image.width, 170 / image.height);
+        const scale = Math.min(170 / image.width, 210 / image.height);
         const width = image.width * scale, height = image.height * scale;
-        const left = (WIDTH - width) / 2, top = 565 + (170 - height) / 2;
+        const left = 76 + (170 - width) / 2, top = 565 + (210 - height) / 2;
         pdf.addImage(card, left, top, width, height);
         pdf.setDrawColor(30); pdf.setLineWidth(0.8);
         // Continue both strokes beyond the card while preserving their diagonal angle.
-        const overhang = 8;
+        const overhang = 14;
         const horizontalOverhang = overhang * width * 0.66 / height;
         pdf.line(left + width * 0.12 - horizontalOverhang, top + height + overhang, left + width * 0.78 + horizontalOverhang, top - overhang);
         pdf.line(left + width * 0.22 - horizontalOverhang, top + height + overhang, left + width * 0.88 + horizontalOverhang, top - overhang);
-        pdf.setFontSize(17);
-        pdf.text("สำเนาถูกต้อง", WIDTH / 2, 752, { align: "center" });
-        pdf.setFontSize(14);
-        pdf.text("ใช้สําหรับการแข่งขันกีฬา TU Freshy Games 2026 เท่านั้น", WIDTH / 2, 768, { align: "center" });
       }
-      // Certification belongs to the profile being printed, not whichever registration
-      // supplied an image. Never borrow a signature from a different/older registration.
-      const renderedSignature = drawSignature(pdf, p, 232, 775, 130, 24);
+      const certificationX = 272;
+      pdf.setFontSize(16);
+      pdf.text("ขอรับรองว่าเป็นความจริง", certificationX, 606);
+      pdf.text("สำเนาถูกต้อง", certificationX, 628);
       pdf.setFontSize(14);
-      if (renderedSignature) {
-        pdf.text(`(${p.signedName || name(registrations[0])})`, WIDTH / 2, 815, { align: "center" });
-      } else {
-        pdf.text("ยังไม่มีลายมือชื่อที่บันทึกไว้ กรุณาลงนามอีกครั้ง", WIDTH / 2, 792, { align: "center" });
+      const restriction = pdf.splitTextToSize("ใช้สำหรับการแข่งขันกีฬา TU Freshy Games 2026 เท่านั้น", 255);
+      pdf.text(restriction, certificationX, 650);
+      // Keep the saved certification attached to the profile being printed.
+      const renderedSignature = drawSignature(pdf, p, certificationX, 683, 165, 35);
+      if (!renderedSignature) {
+        pdf.setDrawColor(175); pdf.setLineWidth(0.4);
+        pdf.line(certificationX, 724, certificationX + 180, 724);
       }
+      pdf.setFontSize(14);
+      const signer = renderedSignature ? p.signedName || name(registrations[0]) : name(registrations[0]);
+      pdf.text(pdf.splitTextToSize(`(${signer})`, 255), certificationX, 743);
 
     });
   }

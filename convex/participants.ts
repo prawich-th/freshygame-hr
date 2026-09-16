@@ -579,6 +579,7 @@ export const completeStaffUpload = mutation({
     nationalIdImageId: v.optional(v.id("_storage")),
     studentIdImageId: v.optional(v.id("_storage")),
     uploadedFromBooth: v.optional(v.boolean()),
+    imageEdit: v.optional(v.object({ field: v.union(v.literal("profilePhotoId"), v.literal("nationalIdImageId"), v.literal("studentIdImageId")), originalId: v.id("_storage") })),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -588,11 +589,18 @@ export const completeStaffUpload = mutation({
     if (!args.profilePhotoId && !args.nationalIdImageId && !args.studentIdImageId) {
       throw new ConvexError("Choose at least one image to upload");
     }
+    if (args.imageEdit) {
+      const { field, originalId } = args.imageEdit;
+      const uploads = [args.profilePhotoId, args.nationalIdImageId, args.studentIdImageId].filter(Boolean);
+      if (args.uploadedFromBooth || uploads.length !== 1 || !args[field] || participant[field] !== originalId) {
+        throw new ConvexError("This image changed. Reopen the record before cropping or rotating it again.");
+      }
+    }
     await linkDocuments(ctx, participant, {
       ...(args.profilePhotoId ? { profilePhotoId: args.profilePhotoId } : {}),
       ...(args.nationalIdImageId ? { nationalIdImageId: args.nationalIdImageId } : {}),
       ...(args.studentIdImageId ? { studentIdImageId: args.studentIdImageId } : {}),
-    }, { userId: staff.userId, booth: args.uploadedFromBooth });
+    }, { userId: staff.userId, booth: args.uploadedFromBooth, imageEdit: args.imageEdit });
     await ctx.db.insert("auditEvents", {
       action: args.uploadedFromBooth
         ? "booth_identity_documents_verified"
