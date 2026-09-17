@@ -9,7 +9,7 @@ Administrators open **Sports & categories** in the staff portal.
 
 The catalog retains the stable sport code and historical name/category aliases. Participant creation, editing, and CSV imports resolve aliases to the current value. Registration fields are updated in the same Convex transaction as the catalog and history, so reactive views and exports see the new values together. The existing text fields remain compatible with current public intake, search, contact directory, and document exports.
 
-Changed registrations have their signatures cleared, consistent with the participant editor, so participants can sign their updated information again. Identity documents are retained.
+Sport and category migrations preserve existing signatures, signer names, signing dates, verification statuses, and identity documents. Participants do not need to sign again after a migration.
 
 Existing sports are supplied from the original defaults until first edited; no initial data rewrite is required. Existing free-form categories are discovered from the selected sport's registrations. No application data is migrated merely by deploying this feature.
 
