@@ -50,8 +50,28 @@ export const recordVisit = mutation({
   },
 });
 
+// The first step reveals only whether a record exists. Personal data still
+// requires the same phone verification as the document upload flow.
+export const checkPerformerStudentId = mutation({
+  args: { auditEventId: v.id("auditEvents"), studentId: v.string() },
+  returns: v.object({ exists: v.boolean() }),
+  handler: async (ctx, args) => {
+    const audit = await ctx.db.get("auditEvents", args.auditEventId);
+    if (!audit || audit.action !== "performer_registration_visit" || audit.successful || Date.now() - audit.createdAt > 30 * 60 * 1000) {
+      throw new ConvexError("Registration session expired. Please refresh and try again");
+    }
+    if (audit.attempts >= 5) throw new ConvexError("Too many attempts. Please refresh or contact staff");
+    const studentId = args.studentId.trim();
+    if (!/^\d{10}$/.test(studentId)) throw new ConvexError("Student ID must contain exactly 10 digits");
+    await ctx.db.patch("auditEvents", audit._id, { attempts: audit.attempts + 1 });
+    const participant = await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).first();
+    return { exists: participant !== null };
+  },
+});
+
 export const registerPerformer = mutation({
   args: {
+    verifiedSessionId: v.optional(v.id("uploadSessions")),
     auditEventId: v.id("auditEvents"),
     performerType: v.union(v.literal("Katakorn"), v.literal("Cheerleader"), v.literal("Parade")),
     category: v.optional(v.string()),
@@ -95,10 +115,17 @@ export const registerPerformer = mutation({
     if (!audit || Date.now() - audit.createdAt > 30 * 60 * 1000) {
       throw new ConvexError("Registration session expired. Please refresh and try again");
     }
-    if (audit.action !== "performer_registration_visit" || audit.successful) {
+    if (audit.action !== "performer_registration_visit" || (audit.successful && !args.verifiedSessionId)) {
       throw new ConvexError("This registration session cannot be used");
     }
 
+    if (args.verifiedSessionId) {
+      const session = await ctx.db.get("uploadSessions", args.verifiedSessionId);
+      if (!session || session.used || session.expiresAt < Date.now() || session.auditEventId !== audit._id || session.studentId !== args.studentId.trim() || !audit.successful) {
+        throw new ConvexError("Verification session expired. Please start again");
+      }
+      await ctx.db.patch("uploadSessions", session._id, { used: true });
+    }
     const studentId = args.studentId.trim();
     const fullNameThai = args.fullNameThai.trim();
     const fullNameEnglish = args.fullNameEnglish.trim();
@@ -120,7 +147,7 @@ export const registerPerformer = mutation({
       .withIndex("by_studentId_and_sport", (q) => q.eq("studentId", studentId).eq("sport", args.performerType))
       .unique();
     const registrationData = {
-      ...normalizeInformation(args, true, false),
+      ...normalizeInformation(args, true, Boolean(args.verifiedSessionId) && registrations.some(row => participantKind(row) === "athlete")),
       participantKind: "performer",
       performerType: args.performerType,
       fullNameThai,
