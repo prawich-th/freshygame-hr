@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { participantKind } from "@/shared/participantKinds";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { CORRECTION_FIELDS, isDocumentField, type CorrectionField, type CorrectionRequest } from "@/shared/corrections";
 import { CORRECTION_FIELD_GROUPS } from "./correctionFieldGroups";
@@ -23,7 +24,7 @@ export function FieldCorrectionEditor({ participant, onClose }: {
   const requests = participant.correctionRequests ?? [];
   const availableFields = Object.entries(CORRECTION_FIELDS).filter(([field]) =>
     !requests.some(request => request.field === field) &&
-    (field !== "jerseyNumber" || participant.participantKind !== "performer"),
+    (field !== "jerseyNumber" || participantKind(participant) === "athlete"),
   );
   const canAdd = selectedField !== "" && availableFields.some(([field]) => field === selectedField);
 

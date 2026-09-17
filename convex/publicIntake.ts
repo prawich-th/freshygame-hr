@@ -224,7 +224,7 @@ export const verifyIdentity = mutation({
       studentId: documents.studentIdImageId ? await ctx.storage.getUrl(documents.studentIdImageId) : null,
     };
     const correctionRequests = registrations.flatMap(row => activeCorrections(row.correctionRequests));
-    return { sessionId, profilePhotoUrl, documentUrls, correctionRequests, requiresJersey: registrations.some(row => participantKind(row) !== "performer"), name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
+    return { sessionId, profilePhotoUrl, documentUrls, correctionRequests, requiresJersey: registrations.some(row => participantKind(row) === "athlete"), name: participant.fullNameThai, sport: [...new Set(registrations.map(row => row.sport))].join(", "), faculty: participant.faculty, phone: participant.phone ?? "", profile: {
       fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty,
       nicknameThai: participant.nicknameThai, nicknameEnglish: participant.nicknameEnglish, sex: participant.sex,
       nationalIdNumber: participant.nationalIdNumber, birthDate: participant.birthDate, guardianPhone: participant.guardianPhone, emergencyContactName: participant.emergencyContactName, emergencyContactRelationship: participant.emergencyContactRelationship, drugAllergies: participant.drugAllergies, foodAllergies: participant.foodAllergies, hospitalizationHistory: participant.hospitalizationHistory,
@@ -276,7 +276,7 @@ export const completeUpload = mutation({
       fullNameEnglish: sourceProfile.fullNameEnglish.trim(),
       faculty: sourceProfile.faculty.trim(),
       email: sourceProfile.email?.trim().toLowerCase() || undefined,
-      ...normalizeInformation(sourceProfile, true, registrations.some(row => participantKind(row) !== "performer")),
+      ...normalizeInformation(sourceProfile, true, registrations.some(row => participantKind(row) === "athlete")),
       ...certifySignature(args.signature, sourceProfile.fullNameThai.trim()),
     };
     if (!profile.fullNameThai || !profile.fullNameEnglish) throw new ConvexError("Thai and English names are required");
@@ -293,7 +293,7 @@ export const completeUpload = mutation({
     }
     for (const row of registrations) {
       const { jerseyNumber, ...personalProfile } = profile;
-      await ctx.db.patch("participants", row._id, participantKind(row) === "performer" ? personalProfile : { ...personalProfile, jerseyNumber });
+      await ctx.db.patch("participants", row._id, participantKind(row) !== "athlete" ? personalProfile : { ...personalProfile, jerseyNumber });
     }
     await linkDocuments(ctx, participant, uploaded);
     for (const row of registrations) {

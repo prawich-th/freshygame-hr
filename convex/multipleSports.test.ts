@@ -389,3 +389,22 @@ test("crop and rotation edits preserve certification across linked registrations
     expect(row?.status).toBe("pending");
   }
 });
+
+test.each(["performer", "support"] as const)("%s can complete an upload without a jersey number", async kind => {
+  const { t, staff } = await setup();
+  const id = await staff.mutation(api.participants.createParticipant, { participant: {
+    ...participant, participantKind: kind, sport: kind === "support" ? "Support team" : "Cheerleader",
+    performerType: kind === "performer" ? "Cheerleader" : undefined,
+    category: kind === "support" ? "Camera" : "Performer",
+  } });
+  const auditEventId = await t.mutation(api.publicIntake.recordVisit, { ipAddress: "test" });
+  const verified = await t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: participant.studentId, phone: participant.phone });
+  expect(verified.requiresJersey).toBe(false);
+  await t.mutation(api.publicIntake.completeUpload, {
+    sessionId: verified.sessionId, ...await uploadFiles(t), signature, confirmed: true,
+    profile: { ...personalInformation, fullNameThai: participant.fullNameThai, fullNameEnglish: participant.fullNameEnglish, faculty: participant.faculty, medicalConditions: "None" },
+  });
+  const saved = await t.run(ctx => ctx.db.get("participants", id));
+  expect(saved).toMatchObject({ status: "pending", signature });
+  expect(saved?.jerseyNumber).toBeUndefined();
+});

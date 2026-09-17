@@ -807,7 +807,7 @@ export const setFieldCorrection = mutation({
     const participant = await ctx.db.get("participants", args.participantId);
     if (!participant) throw new ConvexError("Participant not found");
     if (args.note.length > 500) throw new ConvexError("Correction notes must be at most 500 characters");
-    if (args.field === "jerseyNumber" && resolveKind(participant) === "performer") throw new ConvexError("Performers do not require a jersey number");
+    if (args.field === "jerseyNumber" && resolveKind(participant) !== "athlete") throw new ConvexError("Performers and support team members do not require a jersey number");
     const requests = (participant.correctionRequests ?? []).filter(request => request.field !== args.field);
     if (args.requested) requests.push({ field: args.field, note: args.note.trim(), status: "requested" });
     await ctx.db.patch("participants", participant._id, {

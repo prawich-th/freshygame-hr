@@ -1,3 +1,4 @@
+import { participantKind } from "@/shared/participantKinds";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { type CorrectionField } from "@/shared/corrections";
 
@@ -31,7 +32,7 @@ export function ParticipantRecordDetails({ participant: p, role, activityLabel, 
         { label: "Role", value: role },
         { label: activityLabel, value: p.sport },
         { label: "Category / type", value: category },
-        ...(p.participantKind === "performer" ? [] : [{ label: "Event-day jersey number", value: p.jerseyNumber, correction: "jerseyNumber" as const }]),
+        ...(participantKind(p) !== "athlete" ? [] : [{ label: "Event-day jersey number", value: p.jerseyNumber, correction: "jerseyNumber" as const }]),
       ],
     },
     {
