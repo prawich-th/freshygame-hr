@@ -734,6 +734,30 @@ export const keepOnlySelected = mutation({
   },
 });
 
+export const removeParticipant = mutation({
+  args: { participantId: v.id("participants") },
+  returns: v.null(),
+  handler: async (ctx, {participantId}): Promise<null> => {
+    const staff = await requireAdmin(ctx);
+    const participant = await ctx.db.get("participants", participantId);
+    if (!participant) throw new ConvexError("This participant has already been removed. Refresh the participant list.");
+    for (const status of ["running", "paused"] as const) {
+      if (await ctx.db.query("participantRemovalJobs").withIndex("by_status", q => q.eq("status", status)).first()) throw new ConvexError("A removal is already in progress. Finish or resume it on Selection by sport before starting another.");
+    }
+    const jobId = await ctx.db.insert("participantRemovalJobs", {
+      participantIds: [participantId], nextIndex: 0, removeCount: 1, keepCount: 0,
+      status: "running", createdBy: staff.userId,
+    });
+    await ctx.db.insert("auditEvents", {
+      action: "participant_removed", participantId, staffUserId: staff.userId,
+      ipAddress: "authenticated-staff-session", successful: true, attempts: 1, createdAt: Date.now(),
+    });
+    // Delete the registration in this transaction; excess sessions are cleaned in batches.
+    await ctx.runMutation(internal.participants.removalBatch, {jobId});
+    return null;
+  },
+});
+
 export const resumeRemoval = mutation({
   args: { jobId: v.id("participantRemovalJobs") }, returns: v.null(),
   handler: async (ctx, {jobId}) => {
@@ -786,7 +810,9 @@ export const removalBatch = internalMutation({
       }
       const sessions = await ctx.db.query("uploadSessions").withIndex("by_participantId", q => q.eq("participantId", id)).take(50);
       for (const session of sessions) await ctx.db.delete("uploadSessions", session._id);
-      if (sessions.length === 50) break; // Continue this participant's remaining sessions next batch.
+      const signatures = await ctx.db.query("signatureRequests").withIndex("by_participantId", q => q.eq("participantId", id)).take(50);
+      for (const signature of signatures) await ctx.db.delete("signatureRequests", signature._id);
+      if (sessions.length === 50 || signatures.length === 50) break; // Continue remaining sessions next batch.
       nextIndex++;
     }
     const complete = nextIndex === job.participantIds.length;

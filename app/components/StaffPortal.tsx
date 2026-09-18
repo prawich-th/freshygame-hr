@@ -17,7 +17,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { Activity, BadgeCheck, Bell, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, Menu, LogOut, Pencil, Save, ScrollText, Search, Smartphone, UserCog, UsersRound, X } from "lucide-react";
+import { Activity, BadgeCheck, Bell, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, Menu, LogOut, Pencil, Save, ScrollText, Search, Smartphone, Trash2, UserCog, UsersRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, type InputHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
@@ -151,6 +151,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
 
 function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { stats: { total:number;complete:number;pending:number;sports:number } | undefined; selectedId: Id<"participants"> | null; setSelectedId:(id:Id<"participants">|null)=>void; canEdit:boolean }) {
   const { results, status, loadMore } = usePaginatedQuery(api.participants.list, {}, { initialNumItems: 50 });
+  const [removalMessage, setRemovalMessage] = useState("");
   const recordSync = useRecordSync();
   const convex = useConvex();
   const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all"); const [faculty, setFaculty] = useState(""); const [sport, setSport] = useState(""); const [filterOpen,setFilterOpen]=useState(false); const [autoLoadingFilters,setAutoLoadingFilters]=useState(false); const [draftFilter,setDraftFilter]=useState("all"); const [draftFaculty,setDraftFaculty]=useState(""); const [draftSport,setDraftSport]=useState(""); const [exporting,setExporting]=useState(false); const [selectedIds,setSelectedIds]=useState<Set<Id<"participants">>>(new Set()); const [exportError,setExportError]=useState("");
@@ -176,19 +177,23 @@ function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { s
       <Stat label="All participants" value={stats?.total} icon={UsersRound}/><Stat label="Verified" value={stats?.complete} icon={BadgeCheck}/><Stat label="Awaiting review" value={stats?.pending} icon={Activity}/><Stat label="Activities" value={stats?.sports} icon={CircleGauge}/>
     </div>
     <section className="panel"><div className="panel__head"><h2>Participant records</h2><div className="filters"><div className="search-wrap"><Search size={14}/><input className="input input--search" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name or student ID"/></div><button className="button button--soft filter-trigger" aria-haspopup="dialog" aria-expanded={filterOpen} onClick={openFilters}><ListFilter size={15}/> Filters{activeFilterCount>0&&<span className="filter-count">{activeFilterCount}</span>}</button>{sport&&<button className="button button--soft" disabled={exporting} onClick={()=>void exportSelectedSport()}>{exporting?<span className="spinner" style={{color:"#4b2f25"}}/>:<Download size={14}/>} Sport forms PDF</button>}{selectedIds.size>0&&<button className="button button--primary" disabled={exporting} onClick={()=>void exportBulk()}>{exporting?<span className="spinner"/>:<Download size={14}/>} Personal forms PDF ({selectedIds.size})</button>}{selectedIds.size>0&&<button className="icon-button" title="Clear selection" onClick={()=>setSelectedIds(new Set())}><X size={14}/></button>}</div></div>
+      {removalMessage && <div role="status" className="notice notice--success bulk-export-notice">{removalMessage}</div>}
       {exportError&&<div className="notice notice--error bulk-export-notice">{exportError}</div>}
       <div style={{overflowX:"auto"}}><table className="data-table"><thead><tr><th className="selection-cell"><input type="checkbox" aria-label="Select all filtered participants" checked={allVisibleSelected} onChange={toggleVisible}/></th><th>Participant</th><th>Student ID</th><th>Role</th><th>Faculty</th><th>Sport / Performance</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>{visible.map((p) => <tr key={p._id} onClick={() => setSelectedId(p._id)}><td className="selection-cell" onClick={event=>event.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.fullNameEnglish}`} checked={selectedIds.has(p._id)} onChange={()=>toggleParticipant(p._id)}/></td><td><div className="person-cell">{p.photoUrl ? <img className="person-cell__avatar" src={p.photoUrl} alt=""/> : <span className="person-cell__avatar">{initials(p.fullNameEnglish)}</span>}<div><strong>{p.fullNameThai || p.fullNameEnglish || "Incomplete profile"}</strong><span>{p.fullNameEnglish || p.studentId}</span></div></div></td><td>{p.studentId}</td><td><span className={`pill ${p.participantKind === "performer" ? "pill--cream" : "pill--gray"}`}>{kindLabel[participantKind(p)]}</span></td><td>{p.faculty}</td><td>{p.sport}</td><td>{categoryLabel(p) || "—"}</td><td><div className="participant-status"><span className={`pill ${statusClass[p.status]}`}>{statusLabel[p.status]}</span>{!p.hasSignature && (canEdit ? <RequestSignatureLink key={`${p._id}-${p.updatedAt}`} participantId={p._id} compact /> : <span className="pill pill--amber">Missing signature</span>)}</div></td><td><ChevronRight size={14}/></td></tr>)}{!visible.length && <tr><td colSpan={9} className="empty-state">No matching participants</td></tr>}</tbody></table></div>
       {autoLoadingFilters&&status!=="Exhausted"?<div className="filter-loading"><span className="spinner"/> Loading all participants for this filter…</div>:status === "CanLoadMore"&&<div style={{padding:15,textAlign:"center"}}><button className="button button--ghost" onClick={() => loadMore(50)}>Load more</button></div>}
     </section>
     {canEdit && <footer className="participant-sync-footer">{recordSync.button}{recordSync.notice}</footer>}
     {filterOpen&&<><div className="filter-modal-backdrop" onClick={()=>setFilterOpen(false)}/><form className="filter-modal" role="dialog" aria-modal="true" aria-labelledby="participant-filter-title" onSubmit={event=>{event.preventDefault();applyFilters();}}><div className="filter-modal__head"><div><h2 id="participant-filter-title">Filter participants</h2><p>Narrow records by status, faculty, and activity.</p></div><button type="button" className="icon-button" aria-label="Close filters" onClick={()=>setFilterOpen(false)}><X size={17}/></button></div><div className="filter-modal__body"><div className="field"><label htmlFor="participant-status-filter">Status</label><select id="participant-status-filter" className="select" value={draftFilter} onChange={e=>setDraftFilter(e.target.value)}><option value="all">All statuses</option><option value="incomplete">Incomplete</option><option value="pending">Pending</option><option value="verified">Verified</option><option value="rejected">Correction needed</option></select></div><div className="field"><label htmlFor="participant-faculty-filter">Faculty</label><select id="participant-faculty-filter" className="select" value={draftFaculty} onChange={e=>setDraftFaculty(e.target.value)}><option value="">All faculties</option>{faculties.map(value=><option key={value} value={value}>{value}</option>)}</select></div><div className="field"><label htmlFor="participant-sport-filter">Sport / performance</label><select id="participant-sport-filter" className="select" value={draftSport} onChange={e=>setDraftSport(e.target.value)}><option value="">All activities</option>{sports.map(value=><option key={value} value={value}>{value}</option>)}</select></div></div><div className="filter-modal__actions"><button type="button" className="button button--ghost" onClick={clearFilters}>Clear all</button><div><button type="button" className="button button--soft" onClick={()=>setFilterOpen(false)}>Cancel</button><button className="button button--primary">Apply filters</button></div></div></form></>}
-    {selectedId && <ParticipantDrawer key={selectedId} id={selectedId} onClose={() => setSelectedId(null)} canEdit={canEdit}/>}
+    {selectedId && <ParticipantDrawer key={selectedId} id={selectedId} onClose={() => setSelectedId(null)} onRemoved={() => { setSelectedIds(current => { const next = new Set(current); next.delete(selectedId); return next; }); setSelectedId(null); setRemovalMessage("Participant registration removed."); }} canEdit={canEdit}/>}
   </>;
 }
 
 function Stat({label,value,icon:Icon}:{label:string;value?:number;icon:typeof UsersRound}) { return <article className="stat-card"><div><span>{label}</span><strong>{value ?? "—"}</strong></div><span className="stat-card__icon"><Icon size={17}/></span></article>; }
 
-function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; onClose:()=>void; canEdit:boolean }) {
+function ParticipantDrawer({ id, onClose, onRemoved, canEdit }: { id:Id<"participants">; onClose:()=>void; onRemoved:()=>void; canEdit:boolean }) {
+  const me = useQuery(api.participants.currentStaff);
+  const removeParticipant = useMutation(api.participants.removeParticipant);
+  const [removing, setRemoving] = useState(false);
   const detail = useQuery(api.participants.get, { participantId:id });
   const [pdfState, setPdfState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [pdfError, setPdfError] = useState("");
@@ -211,6 +216,17 @@ function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; on
       setPdfError(errorMessage(error, "Download the PDF"));
       setPdfState("error");
     }
+  }
+  async function removeRecord() {
+    if (busy || removing) return;
+    if (!window.confirm(`Remove ${p.fullNameThai || p.fullNameEnglish || p.studentId} (${p.studentId}) from ${p.sport}?\n\nThis permanently deletes this registration and its unshared documents. Other registrations and shared documents are kept. This cannot be undone.`)) return;
+    setRemoving(true); setBusy(true); setMessage("");
+    try {
+      await removeParticipant({participantId: id});
+      onRemoved();
+    } catch (error) {
+      setMessageIsError(true); setMessage(errorMessage(error, "Remove participant"));
+    } finally { setRemoving(false); setBusy(false); }
   }
   async function saveStatus(nextStatus: "incomplete"|"pending"|"verified"|"rejected") { setBusy(true); try { await updateStatus({participantId:id,status:nextStatus}); setMessageIsError(false);setMessage("Record updated"); } catch(e){setMessageIsError(true);setMessage(errorMessage(e, "Save changes"));} finally {setBusy(false);} }
   function startEditing(){setEditKind(participantKind(p));setMessage("");setEditing(true);}
@@ -244,6 +260,7 @@ function ParticipantDrawer({ id, onClose, canEdit }: { id:Id<"participants">; on
           <FileDown size={14} />{pdfState === "loading" ? "Preparing PDF…" : "Export PDF"}
         </button>
         {canEdit && <button className="button button--soft" disabled={busy || editing} onClick={startEditing}><Pencil size={14} />Edit information</button>}
+        {me?.role === "admin" && <button className="button button--danger" disabled={busy || editing || correctionsOpen || pdfState === "loading"} aria-busy={removing} onClick={() => void removeRecord()}><Trash2 size={14}/>{removing ? "Removing…" : "Remove participant"}</button>}
       </div>
       {canEdit && <div role="group" aria-label="Review decisions">
         <button className="button button--soft" disabled={busy || editing} onClick={() => setCorrectionsOpen(true)} aria-haspopup="dialog" aria-expanded={correctionsOpen}>

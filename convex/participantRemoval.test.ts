@@ -100,3 +100,51 @@ test("participants moved to a different sport after confirmation are not deleted
   expect(await t.run(ctx => ctx.db.get("participants",ids.remove))).toMatchObject({sport:"Swimming"});
   expect(await admin.query(api.participants.latestRemoval, {})).toMatchObject({status:"complete",skippedCount:1,sport:"Volleyball"});
 });
+
+test("individual removal requires an active admin and an existing participant", async () => {
+  const {t, ids, admin} = await setup();
+  const args = {participantId: ids.remove};
+  await expect(t.mutation(api.participants.removeParticipant, args)).rejects.toThrow("Authentication required");
+  await expect(t.withIdentity({subject: `${ids.registrar}|session`}).mutation(api.participants.removeParticipant, args)).rejects.toThrow("Administrator access required");
+  expect(await t.run(ctx => ctx.db.get("participants", ids.remove))).not.toBeNull();
+  await admin.mutation(api.participants.removeParticipant, args);
+  await expect(admin.mutation(api.participants.removeParticipant, args)).rejects.toThrow("already been removed");
+});
+
+test("individual removal preserves other registrations and shared files, clears linked sessions, and records the actor", async () => {
+  vi.useFakeTimers();
+  const {t, ids, admin} = await setup();
+  const files = await t.run(async ctx => {
+    const shared = await ctx.storage.store(new Blob(["shared"]));
+    const privateFile = await ctx.storage.store(new Blob(["private"]));
+    await ctx.db.patch("participants", ids.keep, {studentId: "6909680002", sport: "Swimming", profilePhotoId: shared});
+    await ctx.db.patch("participants", ids.remove, {profilePhotoId: shared, nationalIdImageId: privateFile});
+    const auditEventId = await ctx.db.insert("auditEvents", {action: "test", ipAddress: "test", attempts: 1, createdAt: 1, participantId: ids.remove});
+    for (let i = 0; i < 60; i++) {
+      await ctx.db.insert("uploadSessions", {participantId: ids.remove, auditEventId, expiresAt: 99999, used: false});
+      await ctx.db.insert("signatureRequests", {participantId: ids.remove, studentId: "6909680002", token: `test-${i}`, versions: [], expiresAt: 99999, used: false, createdBy: ids.admin});
+    }
+    return {shared, privateFile, auditEventId};
+  });
+  await admin.mutation(api.participants.removeParticipant, {participantId: ids.remove});
+  expect(await t.run(ctx => ctx.db.get("participants", ids.remove))).toBeNull();
+  await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  await t.run(async ctx => {
+    expect(await ctx.db.get("participants", ids.keep)).not.toBeNull();
+    expect(await ctx.storage.get(files.shared)).not.toBeNull();
+    expect(await ctx.storage.get(files.privateFile)).toBeNull();
+    expect(await ctx.db.get("auditEvents", files.auditEventId)).not.toBeNull();
+    expect(await ctx.db.query("uploadSessions").withIndex("by_participantId", q => q.eq("participantId", ids.remove)).first()).toBeNull();
+    expect(await ctx.db.query("signatureRequests").withIndex("by_participantId", q => q.eq("participantId", ids.remove)).first()).toBeNull();
+    expect(await ctx.db.query("auditEvents").withIndex("by_staffUserId", q => q.eq("staffUserId", ids.admin)).collect()).toEqual(expect.arrayContaining([expect.objectContaining({action: "participant_removed", participantId: ids.remove, successful: true})]));
+  });
+});
+
+test("individual removal does not overlap a running or paused bulk removal", async () => {
+  for (const status of ["running", "paused"] as const) {
+    const {t, ids, admin} = await setup();
+    await t.run(ctx => ctx.db.insert("participantRemovalJobs", {participantIds: [ids.keep], nextIndex: 0, removeCount: 1, keepCount: 1, status, createdBy: ids.admin}));
+    await expect(admin.mutation(api.participants.removeParticipant, {participantId: ids.remove})).rejects.toThrow("already in progress");
+    expect(await t.run(ctx => ctx.db.get("participants", ids.remove))).not.toBeNull();
+  }
+});
