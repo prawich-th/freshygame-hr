@@ -158,16 +158,22 @@ async function generateLegacyParticipantPdf(
     row([["ชื่อ-สกุล", 27], [participant.fullNameThai || "-", 92], ["ชื่อเล่น", 21], [participant.nicknameThai || "-", 42]]);
     row([["Full name", 27], [participant.fullNameEnglish || "-", 92], ["Nickname", 21], [participant.nicknameEnglish || "-", 42]], 8, true);
     row([["รหัสนักศึกษา", 27], [participant.studentId, 64], ["เพศ", 25], [participant.sex || "-", 66]]);
-    row([["รหัสประชาชน", 27], [participant.nationalIdNumber || "-", 155]], 8, true);
+    row(kind === "performer"
+      ? [["รหัสประชาชน", 27], [participant.nationalIdNumber || "-", 64], ["LINE ID", 25], [participant.lineId || "-", 66]]
+      : [["รหัสประชาชน", 27], [participant.nationalIdNumber || "-", 155]], 8, true);
     const birthDate = participant.birthDate ? participant.birthDate.split("-").reverse().join("/") + " (ค.ศ.)" : "-";
     const age = participant.birthDate ? ageOnDate(participant.birthDate) : participant.age;
     row([["เกิดวันที่", 27], [birthDate, 64], ["อายุ", 25], [age == null ? "-" : `${age} ปี`, 66]]);
     row([["คณะ", 27], [participant.faculty || "-", 92], ["โทร", 21], [participant.phone || "-", 42]], 8, true);
     y += 2;
-    row([["ประเภทนักกีฬา", 34], [participant.qualificationCriteria || "ยังไม่ได้ระบุ", 148]]);
-    row([["เข้าข่ายเนื่องจาก", 34], [[participant.qualificationDetails, participant.eligibilityCertification].filter(Boolean).join(" / ") || "ยังไม่ได้ระบุ", 148]], 8, true);
-    y += 2;
-    row([[kind === "athlete" ? "กีฬา" : "กิจกรรม", 21], [participant.sport || "-", 48], ["ประเภท", 21], [categoryLabel(participant) || "-", 60], ["เลขเสื้อ", 17], [participant.jerseyNumber || "-", 15]]);
+    if (kind !== "performer") {
+      row([["ประเภทนักกีฬา", 34], [participant.qualificationCriteria || "ยังไม่ได้ระบุ", 148]]);
+      row([["เข้าข่ายเนื่องจาก", 34], [[participant.qualificationDetails, participant.eligibilityCertification].filter(Boolean).join(" / ") || "ยังไม่ได้ระบุ", 148]], 8, true);
+      y += 2;
+    }
+    row(kind === "performer"
+      ? [["กิจกรรม", 21], [participant.sport || "-", 48], ["ประเภท", 21], [categoryLabel(participant) || "-", 92]]
+      : [[kind === "athlete" ? "กีฬา" : "กิจกรรม", 21], [participant.sport || "-", 48], ["ประเภท", 21], [categoryLabel(participant) || "-", 60], ["เลขเสื้อ", 17], [participant.jerseyNumber || "-", 15]]);
     textBox(pdf, "2. ข้อมูลผู้ติดต่อฉุกเฉิน", 14, y + 3, 182, 7, 15, true);
     y += 11;
     // Contact name and relationship have not been collected; never infer them from the participant.
@@ -287,8 +293,8 @@ function compactDocument(pdf: Pdf, label: string, data: string | null, x: number
   else textBox(pdf, "ยังไม่ได้ส่งเอกสาร", x, y + height / 2 - 4, width, 8, 12, false, "center");
   if (data) {
     pdf.setDrawColor(30, 30, 30); pdf.setLineWidth(0.3);
-    pdf.line(x + width * 0.63, y + height, x + width * 0.87, y);
-    pdf.line(x + width * 0.70, y + height, x + width * 0.94, y);
+    pdf.line(x + width * 0.34, y + height, x + width * 0.58, y);
+    pdf.line(x + width * 0.42, y + height, x + width * 0.66, y);
   }
 }
 
