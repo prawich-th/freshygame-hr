@@ -26,6 +26,7 @@ import { normalizeSport } from "@/shared/sports";
 import { SportCatalog, useSportCatalog } from "./SportCatalog";
 import { ParticipantSelection } from "./ParticipantSelection";
 import { Brand } from "./Brand";
+import { downloadParticipantCsv, type ParticipantContact } from "../lib/participantCsv";
 import { generateParticipantPdf } from "../lib/participantPdf";
 import { compressImage, type UploadImageKind } from "../lib/compressImage";
 
@@ -161,6 +162,27 @@ function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { s
     const haystack = `${p.fullNameThai} ${p.fullNameEnglish} ${p.studentId} ${p.sport} ${p.faculty} ${p.participantKind}`.toLowerCase();
     return haystack.includes(search.toLowerCase()) && (filter === "all" || p.status === filter) && (!faculty || p.faculty === faculty) && (!sport || p.sport === sport);
   }), [results, search, filter, faculty, sport]);
+  const [csvKind, setCsvKind] = useState<"athlete" | "performer">("athlete");
+  const [exportingCsv, setExportingCsv] = useState(false);
+  async function exportCsv() {
+    setExportingCsv(true); setExportError("");
+    try {
+      const contacts: ParticipantContact[] = [];
+      let cursor: string | null = null;
+      let isDone = false;
+      while (!isDone) {
+        const result: { page: ParticipantContact[]; continueCursor: string; isDone: boolean } = await convex.query(api.participants.exportContacts, {
+          kind: csvKind, paginationOpts: { cursor, numItems: 200 },
+        });
+        contacts.push(...result.page);
+        cursor = result.continueCursor;
+        isDone = result.isDone;
+      }
+      downloadParticipantCsv(contacts, csvKind);
+    } catch (error) {
+      setExportError(errorMessage(error, "Export participant CSV"));
+    } finally { setExportingCsv(false); }
+  }
   const selectableVisible=visible.slice(0,50);
   async function exportSelectedSport(){if(!sport)return;setExporting(true);setExportError("");try{const entries=await convex.query(api.participants.exportSport,{sport});await generateParticipantPdf(entries,`Freshy-Game-${sport}`,{includeSportSheets:true});}catch(error){setExportError(errorMessage(error,"Download sport PDF"));}finally{setExporting(false);}}
   function toggleParticipant(id:Id<"participants">){if(!selectedIds.has(id)&&selectedIds.size>=50){setExportError("A bulk PDF can contain at most 50 participants.");return;}setExportError("");setSelectedIds(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});}
@@ -177,6 +199,13 @@ function ParticipantDashboard({ stats, selectedId, setSelectedId, canEdit }: { s
       <Stat label="All participants" value={stats?.total} icon={UsersRound}/><Stat label="Verified" value={stats?.complete} icon={BadgeCheck}/><Stat label="Awaiting review" value={stats?.pending} icon={Activity}/><Stat label="Activities" value={stats?.sports} icon={CircleGauge}/>
     </div>
     <section className="panel"><div className="panel__head"><h2>Participant records</h2><div className="filters"><div className="search-wrap"><Search size={14}/><input className="input input--search" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name or student ID"/></div><button className="button button--soft filter-trigger" aria-haspopup="dialog" aria-expanded={filterOpen} onClick={openFilters}><ListFilter size={15}/> Filters{activeFilterCount>0&&<span className="filter-count">{activeFilterCount}</span>}</button>{sport&&<button className="button button--soft" disabled={exporting} onClick={()=>void exportSelectedSport()}>{exporting?<span className="spinner" style={{color:"#4b2f25"}}/>:<Download size={14}/>} Sport forms PDF</button>}{selectedIds.size>0&&<button className="button button--primary" disabled={exporting} onClick={()=>void exportBulk()}>{exporting?<span className="spinner"/>:<Download size={14}/>} Personal forms PDF ({selectedIds.size})</button>}{selectedIds.size>0&&<button className="icon-button" title="Clear selection" onClick={()=>setSelectedIds(new Set())}><X size={14}/></button>}</div></div>
+      <div className="panel__head">
+        <div><h2>Export contacts</h2><small>All participants of this type · One row per student · Ignores table filters</small></div>
+        <div className="filters">
+          <select className="select" aria-label="CSV participant type" value={csvKind} disabled={exportingCsv} onChange={event => setCsvKind(event.target.value as "athlete" | "performer")}><option value="athlete">Athletes</option><option value="performer">Performers</option></select>
+          <button className="button button--soft" disabled={exportingCsv} onClick={() => void exportCsv()}>{exportingCsv ? <span className="spinner"/> : <FileSpreadsheet size={15}/>} {exportingCsv ? "Exporting…" : "Export CSV"}</button>
+        </div>
+      </div>
       {removalMessage && <div role="status" className="notice notice--success bulk-export-notice">{removalMessage}</div>}
       {exportError&&<div className="notice notice--error bulk-export-notice">{exportError}</div>}
       <div style={{overflowX:"auto"}}><table className="data-table"><thead><tr><th className="selection-cell"><input type="checkbox" aria-label="Select all filtered participants" checked={allVisibleSelected} onChange={toggleVisible}/></th><th>Participant</th><th>Student ID</th><th>Role</th><th>Faculty</th><th>Sport / Performance</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>{visible.map((p) => <tr key={p._id} onClick={() => setSelectedId(p._id)}><td className="selection-cell" onClick={event=>event.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.fullNameEnglish}`} checked={selectedIds.has(p._id)} onChange={()=>toggleParticipant(p._id)}/></td><td><div className="person-cell">{p.photoUrl ? <img className="person-cell__avatar" src={p.photoUrl} alt=""/> : <span className="person-cell__avatar">{initials(p.fullNameEnglish)}</span>}<div><strong>{p.fullNameThai || p.fullNameEnglish || "Incomplete profile"}</strong><span>{p.fullNameEnglish || p.studentId}</span></div></div></td><td>{p.studentId}</td><td><span className={`pill ${p.participantKind === "performer" ? "pill--cream" : "pill--gray"}`}>{kindLabel[participantKind(p)]}</span></td><td>{p.faculty}</td><td>{p.sport}</td><td>{categoryLabel(p) || "—"}</td><td><div className="participant-status"><span className={`pill ${statusClass[p.status]}`}>{statusLabel[p.status]}</span>{!p.hasSignature && (canEdit ? <RequestSignatureLink key={`${p._id}-${p.updatedAt}`} participantId={p._id} compact /> : <span className="pill pill--amber">Missing signature</span>)}</div></td><td><ChevronRight size={14}/></td></tr>)}{!visible.length && <tr><td colSpan={9} className="empty-state">No matching participants</td></tr>}</tbody></table></div>

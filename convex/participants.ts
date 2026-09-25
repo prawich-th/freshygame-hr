@@ -146,6 +146,34 @@ export const bootstrapAdmin = mutation({
   },
 });
 
+export const exportContacts = query({
+  args: {
+    kind: v.union(v.literal("athlete"), v.literal("performer")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(v.object({
+    studentId: v.string(), name: v.string(), nickname: v.string(),
+    faculty: v.string(), tel: v.string(), line: v.string(),
+  })),
+  handler: async (ctx, args) => {
+    await requireRecordsAccess(ctx);
+    // Scan bounded pages so legacy kinds are classified just like the dashboard.
+    const result = await ctx.db.query("participants").withIndex("by_creation_time")
+      .order("desc").paginate({ ...args.paginationOpts, numItems: Math.min(args.paginationOpts.numItems, 200) });
+    return {
+      ...result,
+      page: result.page.filter(p => resolveKind(p) === args.kind).map(p => ({
+        studentId: p.studentId,
+        name: p.fullNameThai || p.fullNameEnglish,
+        nickname: p.nicknameThai || p.nicknameEnglish || "",
+        faculty: p.faculty,
+        tel: p.phone ?? "",
+        line: p.lineId ?? "",
+      })),
+    };
+  },
+});
+
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(listItem),
