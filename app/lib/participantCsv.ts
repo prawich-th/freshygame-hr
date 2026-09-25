@@ -5,6 +5,8 @@ export type ParticipantContact = {
   faculty: string;
   tel: string;
   line: string;
+  sport: string;
+  type: string;
 };
 
 function csvCell(value: string) {
@@ -14,15 +16,11 @@ function csvCell(value: string) {
 }
 
 export function participantCsv(contacts: ParticipantContact[]) {
-  // A person registered for multiple activities appears once in a type's export.
-  const people = new Map<string, ParticipantContact>();
-  for (const contact of contacts) {
-    if (!people.has(contact.studentId)) people.set(contact.studentId, contact);
-  }
-  const rows = [...people.values()].sort((a, b) => a.studentId.localeCompare(b.studentId));
+  // Keep each registration so every sport remains paired with its event types.
+  const rows = [...contacts].sort((a, b) => a.studentId.localeCompare(b.studentId) || a.sport.localeCompare(b.sport));
   return "\uFEFF" + [
-    ["Name", "Nickname", "Faculty", "Tel", "Line", "Student ID"],
-    ...rows.map(p => [p.name, p.nickname, p.faculty, p.tel, p.line, p.studentId]),
+    ["Name", "Nickname", "Faculty", "Tel", "Line", "Student ID", "Sport", "Type"],
+    ...rows.map(p => [p.name, p.nickname, p.faculty, p.tel, p.line, p.studentId, p.sport, p.type]),
   ].map(row => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 

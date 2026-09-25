@@ -154,6 +154,7 @@ export const exportContacts = query({
   returns: paginationResultValidator(v.object({
     studentId: v.string(), name: v.string(), nickname: v.string(),
     faculty: v.string(), tel: v.string(), line: v.string(),
+    sport: v.string(), type: v.string(),
   })),
   handler: async (ctx, args) => {
     await requireRecordsAccess(ctx);
@@ -169,6 +170,8 @@ export const exportContacts = query({
         faculty: p.faculty,
         tel: p.phone ?? "",
         line: p.lineId ?? "",
+        sport: p.sport,
+        type: participantCategories(p).join("; "),
       })),
     };
   },
