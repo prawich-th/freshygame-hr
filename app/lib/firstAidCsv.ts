@@ -3,6 +3,7 @@ export type FirstAidLogRow = {
   borrowerName: string;
   nickname: string;
   phone: string;
+  faculty: string;
   studentId: string;
   sport: string;
   borrowedAt: number;
@@ -22,8 +23,8 @@ const time = (value: number | null) => value === null ? "" : new Date(value).toL
 export function firstAidCsv(rows: FirstAidLogRow[]) {
   const sorted = [...rows].sort((a, b) => a.borrowedAt - b.borrowedAt);
   return "﻿" + [
-    ["วันที่ยืม", "วันที่คืน", "ชื่อ - สกุล", "ชื่อเล่น", "เบอร์โทร", "รหัสนักศึกษา", "สำหรับกีฬา", "กล่องที่", "ผู้คืน", "หมายเหตุ"],
-    ...sorted.map(r => [time(r.borrowedAt), time(r.returnedAt), r.borrowerName, r.nickname, r.phone, r.studentId, r.sport, String(r.kitNumber), r.returnerName, r.note]),
+    ["วันที่ยืม", "วันที่คืน", "ชื่อ - สกุล", "ชื่อเล่น", "คณะ", "เบอร์โทร", "รหัสนักศึกษา", "สำหรับกีฬา", "กล่องที่", "ผู้คืน", "หมายเหตุ"],
+    ...sorted.map(r => [time(r.borrowedAt), time(r.returnedAt), r.borrowerName, r.nickname, r.faculty, r.phone, r.studentId, r.sport, String(r.kitNumber), r.returnerName, r.note]),
   ].map(row => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 

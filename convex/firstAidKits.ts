@@ -5,6 +5,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAdmin, requireEditor, requireRecordsAccess } from "./access";
 import { catalog } from "./sportCatalog";
+import { FACULTIES } from "../shared/faculties";
 
 const MAX_KITS = 100;
 // Allow small clock drift between staff devices and the server.
@@ -17,6 +18,7 @@ const loan = v.object({
   borrowerName: v.string(),
   nickname: v.string(),
   phone: v.string(),
+  faculty: v.string(),
   studentId: v.string(),
   sport: v.string(),
   borrowedAt: v.number(),
@@ -33,7 +35,7 @@ const publicKit = v.object({
   id: v.id("firstAidKits"),
   number: v.number(),
   label: v.string(),
-  current: v.union(v.object({ name: v.string(), nickname: v.string(), sport: v.string(), borrowedAt: v.number() }), v.null()),
+  current: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), sport: v.string(), borrowedAt: v.number() }), v.null()),
 });
 
 const kitOverview = v.object({
@@ -66,6 +68,8 @@ export function cleanPhone(value: string) {
   return phone;
 }
 
+const faculty = v.union(...FACULTIES.map(f => v.literal(f.code)));
+
 function cleanNote(value?: string) {
   const note = value?.trim() ?? "";
   if (note.length > 300) throw new ConvexError("Notes must be at most 300 characters");
@@ -86,7 +90,7 @@ async function savedBorrower(ctx: QueryCtx | MutationCtx, studentId: string) {
  * Resolve a person's details, filling blanks from their earlier logs and remembering
  * anything new so the next visit only needs a student ID.
  */
-async function resolvePerson(ctx: MutationCtx, args: { studentId: string; name?: string; nickname?: string; phone?: string }) {
+async function resolvePerson(ctx: MutationCtx, args: { studentId: string; name?: string; nickname?: string; phone?: string; faculty?: string }) {
   const studentId = cleanStudentId(args.studentId);
   const saved = await savedBorrower(ctx, studentId);
   const pick = (value: string | undefined, fallback: string | undefined) => value?.trim() || fallback || "";
@@ -96,10 +100,12 @@ async function resolvePerson(ctx: MutationCtx, args: { studentId: string; name?:
   if (!rawName) throw new ConvexError("Enter your full name");
   if (!rawNickname) throw new ConvexError("Enter your nickname");
   if (!rawPhone) throw new ConvexError("Enter your phone number");
-  const person = { studentId, name: text(rawName, "Name"), nickname: text(rawNickname, "Nickname", 50), phone: cleanPhone(rawPhone) };
+  const rawFaculty = args.faculty || saved?.faculty;
+  if (!rawFaculty) throw new ConvexError("Choose your faculty");
+  const person = { studentId, name: text(rawName, "Name"), nickname: text(rawNickname, "Nickname", 50), phone: cleanPhone(rawPhone), faculty: rawFaculty };
   if (!saved) await ctx.db.insert("firstAidBorrowers", { ...person, updatedAt: Date.now() });
-  else if (saved.name !== person.name || saved.nickname !== person.nickname || saved.phone !== person.phone) {
-    await ctx.db.patch("firstAidBorrowers", saved._id, { name: person.name, nickname: person.nickname, phone: person.phone, updatedAt: Date.now() });
+  else if (saved.name !== person.name || saved.nickname !== person.nickname || saved.phone !== person.phone || saved.faculty !== person.faculty) {
+    await ctx.db.patch("firstAidBorrowers", saved._id, { name: person.name, nickname: person.nickname, phone: person.phone, faculty: person.faculty, updatedAt: Date.now() });
   }
   return person;
 }
@@ -138,7 +144,7 @@ async function present(ctx: QueryCtx, row: Doc<"firstAidKitLoans">, names: Map<I
   };
   return {
     id: row._id, kitId: row.kitId, kitNumber: row.kitNumber,
-    borrowerName: row.borrowerName, nickname: row.nickname, phone: row.phone, studentId: row.studentId, sport: row.sport,
+    borrowerName: row.borrowerName, nickname: row.nickname, phone: row.phone, faculty: row.faculty ?? "", studentId: row.studentId, sport: row.sport,
     borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null,
     returnerName: row.returnerName ?? "", returnerStudentId: row.returnerStudentId ?? "", note: row.note ?? "",
     borrowedByName: await name(row.borrowedBy), returnedByName: await name(row.returnedBy),
@@ -156,13 +162,13 @@ export const publicStatus = query({
       const current = await openLoan(ctx, kit._id);
       return {
         id: kit._id, number: kit.number, label: kit.label ?? "",
-        current: current ? { name: current.borrowerName, nickname: current.nickname, sport: current.sport, borrowedAt: current.borrowedAt } : null,
+        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", sport: current.sport, borrowedAt: current.borrowedAt } : null,
       };
     }));
   },
 });
 
-const publicMovement = v.object({ sport: v.string(), nickname: v.string(), borrowedAt: v.number(), returnedAt: v.union(v.number(), v.null()) });
+const publicMovement = v.object({ sport: v.string(), nickname: v.string(), faculty: v.string(), borrowedAt: v.number(), returnedAt: v.union(v.number(), v.null()) });
 
 /** Read-only public tracking: where each kit is and which sports it has visited since `dayStart`. */
 export const publicTracking = query({
@@ -177,8 +183,8 @@ export const publicTracking = query({
       const today = await ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_borrowedAt", q => q.eq("kitId", kit._id).gte("borrowedAt", since)).take(30);
       return {
         id: kit._id, number: kit.number, label: kit.label ?? "",
-        current: current ? { name: current.borrowerName, nickname: current.nickname, sport: current.sport, borrowedAt: current.borrowedAt } : null,
-        today: today.map(row => ({ sport: row.sport, nickname: row.nickname, borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null })),
+        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", sport: current.sport, borrowedAt: current.borrowedAt } : null,
+        today: today.map(row => ({ sport: row.sport, nickname: row.nickname, faculty: row.faculty ?? "", borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null })),
       };
     }));
   },
@@ -194,12 +200,12 @@ export const sportOptions = query({
 /** Lets a returning borrower skip retyping. Only a masked phone number is revealed. */
 export const knownBorrower = query({
   args: { studentId: v.string() },
-  returns: v.union(v.object({ name: v.string(), nickname: v.string(), phoneHint: v.string() }), v.null()),
+  returns: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), phoneHint: v.string() }), v.null()),
   handler: async (ctx, { studentId }) => {
     const id = studentId.trim();
     if (!/^\d{10}$/.test(id)) return null;
     const saved = await savedBorrower(ctx, id);
-    return saved ? { name: saved.name, nickname: saved.nickname, phoneHint: `•••-•••-${saved.phone.slice(-4)}` } : null;
+    return saved ? { name: saved.name, nickname: saved.nickname, faculty: saved.faculty ?? "", phoneHint: `•••-•••-${saved.phone.slice(-4)}` } : null;
   },
 });
 
@@ -208,6 +214,7 @@ const person = {
   name: v.optional(v.string()),
   nickname: v.optional(v.string()),
   phone: v.optional(v.string()),
+  faculty: v.optional(faculty),
 };
 
 export const checkOut = mutation({
@@ -232,7 +239,7 @@ export const checkOut = mutation({
     }
     const id = await ctx.db.insert("firstAidKitLoans", {
       kitId: kit._id, kitNumber: kit.number,
-      borrowerName: borrower.name, nickname: borrower.nickname, phone: borrower.phone, studentId: borrower.studentId,
+      borrowerName: borrower.name, nickname: borrower.nickname, phone: borrower.phone, faculty: borrower.faculty, studentId: borrower.studentId,
       sport, note, borrowedAt, borrowedBy: staffId,
     });
     await audit(ctx, staffId, `first_aid_kit_${current ? "handed_over" : "checked_out"}:${kit.number}:${sport}:${borrower.studentId}`);
@@ -335,7 +342,7 @@ export const updateKit = mutation({
 
 export const updateLoan = mutation({
   args: {
-    loanId: v.id("firstAidKitLoans"), borrowerName: v.string(), nickname: v.string(), phone: v.string(), studentId: v.string(),
+    loanId: v.id("firstAidKitLoans"), borrowerName: v.string(), nickname: v.string(), phone: v.string(), faculty, studentId: v.string(),
     sport: v.string(), note: v.optional(v.string()), borrowedAt: v.number(), returnedAt: v.union(v.number(), v.null()),
   },
   returns: v.null(),
@@ -351,7 +358,7 @@ export const updateLoan = mutation({
       if ((await latestLoan(ctx, row.kitId))?._id !== row._id) throw new ConvexError("Only the kit's most recent checkout can be reopened");
     }
     await ctx.db.patch("firstAidKitLoans", row._id, {
-      borrowerName: text(args.borrowerName, "Name"), nickname: text(args.nickname, "Nickname", 50), phone: cleanPhone(args.phone),
+      borrowerName: text(args.borrowerName, "Name"), nickname: text(args.nickname, "Nickname", 50), phone: cleanPhone(args.phone), faculty: args.faculty,
       studentId: cleanStudentId(args.studentId), sport: text(args.sport, "Sport / activity"), note: cleanNote(args.note),
       borrowedAt, returnedAt,
       ...(returnedAt === undefined ? { returnerName: undefined, returnerStudentId: undefined, returnedBy: undefined } : {}),

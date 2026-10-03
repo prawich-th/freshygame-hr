@@ -107,6 +107,7 @@ export default defineSchema({
     name: v.string(),
     nickname: v.string(),
     phone: v.string(),
+    faculty: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_studentId", ["studentId"]),
 
@@ -117,6 +118,8 @@ export default defineSchema({
     borrowerName: v.string(),
     nickname: v.string(),
     phone: v.string(),
+    // Short code from shared/faculties.ts; optional only for entries logged before faculty was collected.
+    faculty: v.optional(v.string()),
     studentId: v.string(),
     sport: v.string(),
     borrowedAt: v.number(),

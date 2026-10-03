@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Copy, Download, Printer } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
+import { FIRST_AID_CONTACT_TEXT } from "./FirstAidContact";
 
 type Kit = { id: Id<"firstAidKits">; number: number; label: string };
 
@@ -19,6 +20,7 @@ function labelSheet(kits: Kit[], codes: Map<number, string>, origin: string) {
     <strong>กล่องที่ ${kit.number}</strong>${kit.label ? `<small>${escapeHtml(kit.label)}</small>` : ""}
     <img src="${codes.get(kit.number)}" alt="QR code for kit ${kit.number}">
     <span>สแกนเพื่อยืม คืน หรือรับต่อ<br>Scan to borrow, return, or take over</span>
+    <em>${escapeHtml(FIRST_AID_CONTACT_TEXT)}</em>
     <code>${escapeHtml(origin + kitPath(kit.number))}</code>
   </section>`).join("");
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>First aid kit labels</title><style>
@@ -30,6 +32,7 @@ function labelSheet(kits: Kit[], codes: Map<number, string>, origin: string) {
     small { font-size: 10pt; color: #6f625b; }
     img { width: 42mm; height: 42mm; }
     span { font-size: 9pt; line-height: 1.4; }
+    em { font-style: normal; font-size: 8pt; font-weight: 700; color: #4b2f25; }
     code { font-size: 7pt; color: #6f625b; overflow-wrap: anywhere; }
   </style></head><body><main>${labels}</main><script>window.onload = () => { window.print(); };</script></body></html>`;
 }

@@ -791,3 +791,15 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-qr code { max-width: 100%; color: $muted; font-size: 10px; overflow-wrap: anywhere; }
 .kit-qr__actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .kit-qr__actions .button { min-height: 32px; padding: 0 11px; font-size: 11px; }
+.kit-contact { margin: 24px 0 0; padding: 14px; border-radius: 10px; background: #f7f5f1; color: $muted; display: flex; align-items: flex-start; gap: 10px; font-size: 12px; line-height: 1.8; }
+.kit-contact svg { flex-shrink: 0; margin-top: 4px; color: $brown; }
+.kit-contact a { color: $brown; font-weight: 800; white-space: nowrap; }
+.kit-faculty { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; background: #f2ece7; color: $brown; font-size: 10px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
+.kit-faculty-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kit-faculty-choice label { cursor: pointer; min-width: 0; }
+.kit-faculty-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.kit-faculty-choice label > span { height: 100%; padding: 12px 10px; border: 1.5px solid #ded7d1; border-radius: 12px; display: flex; flex-direction: column; gap: 3px; text-align: center; }
+.kit-faculty-choice strong { font-size: 15px; color: $ink; }
+.kit-faculty-choice small { color: $muted; font-size: 10px; line-height: 1.4; }
+.kit-faculty-choice input:checked + span { border-color: $brown; background: #f5eee7; box-shadow: 0 0 0 3px rgba(75,47,37,.08); }
+.kit-faculty-choice input:focus-visible + span { outline: 2px solid $brown; outline-offset: 2px; }

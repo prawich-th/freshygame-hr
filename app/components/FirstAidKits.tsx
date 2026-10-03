@@ -8,7 +8,8 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 import { errorMessage } from "../lib/errors";
-import { formatTime } from "./FirstAidLog";
+import { FacultyTag, formatTime } from "./FirstAidLog";
+import { FACULTIES } from "@/shared/faculties";
 import { downloadFirstAidCsv } from "../lib/firstAidCsv";
 import { FirstAidKitLinks } from "./FirstAidKitLinks";
 
@@ -63,7 +64,7 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
           {kit.label && <small>{kit.label}</small>}
           {kit.current ? <span className="kit-card__where">
             <b>{kit.current.sport}</b>
-            <span>{kit.current.borrowerName} ({kit.current.nickname}) · {kit.current.studentId}</span>
+            <span>{kit.current.borrowerName} ({kit.current.nickname}){kit.current.faculty && <> <FacultyTag code={kit.current.faculty} /></>} · {kit.current.studentId}</span>
             <span><a href={`tel:${kit.current.phone}`}>{kit.current.phone}</a> · since {formatTime(kit.current.borrowedAt)}</span>
           </span> : <span className="kit-card__where"><span>{kit.lastReturned ? `Last: ${kit.lastReturned.sport} · returned ${formatTime(kit.lastReturned.returnedAt!)}` : "Not used yet"}</span></span>}
           <span className="kit-card__foot"><span>{kit.loansToday} checkout{kit.loansToday === 1 ? "" : "s"} today</span>{canEdit && kit.current && <button type="button" className="button button--soft" disabled={busy} onClick={() => void markReturned(kit.id, kit.current!.studentId)}>Mark returned</button>}</span>
@@ -108,18 +109,19 @@ function LogPanel({ kits, results, status, loadMore, kitFilter, setKitFilter, ca
     </div></div>
     {exportError && <div role="alert" className="notice notice--error bulk-export-notice">{exportError}</div>}
     <div style={{ overflowX: "auto" }}><table className="data-table kit-log">
-      <thead><tr><th>วันที่ยืม · Borrowed</th><th>วันที่คืน · Returned</th><th>ชื่อ - สกุล · Name</th><th>รหัสนักศึกษา · Student ID</th><th>เบอร์โทร · Phone</th><th>สำหรับกีฬา · Sport</th><th>กล่องที่ · Kit</th>{canEdit && <th aria-label="Actions" />}</tr></thead>
+      <thead><tr><th>วันที่ยืม · Borrowed</th><th>วันที่คืน · Returned</th><th>ชื่อ - สกุล · Name</th><th>คณะ · Faculty</th><th>รหัสนักศึกษา · Student ID</th><th>เบอร์โทร · Phone</th><th>สำหรับกีฬา · Sport</th><th>กล่องที่ · Kit</th>{canEdit && <th aria-label="Actions" />}</tr></thead>
       <tbody>{results.map(row => <tr key={row.id} onClick={canEdit ? () => onEdit(row) : undefined} style={canEdit ? undefined : { cursor: "default" }}>
         <td>{formatTime(row.borrowedAt)}</td>
         <td>{row.returnedAt === null ? <span className="pill pill--red">OUT</span> : <>{formatTime(row.returnedAt)}{row.returnerStudentId && row.returnerStudentId !== row.studentId && <><br /><span className="kit-log__muted">by {row.returnerName}</span></>}</>}</td>
         <td><strong>{row.borrowerName}</strong><br /><span className="kit-log__muted">{row.nickname}</span></td>
+        <td>{row.faculty ? <FacultyTag code={row.faculty} /> : "—"}</td>
         <td>{row.studentId}</td>
         <td>{row.phone}</td>
         <td>{row.sport}{row.note && <><br /><span className="kit-log__muted">{row.note}</span></>}</td>
         <td><strong>{row.kitNumber}</strong></td>
         {canEdit && <td><Pencil size={13} aria-label={`Edit entry for kit ${row.kitNumber}`} /></td>}
       </tr>)}
-      {status !== "LoadingFirstPage" && !results.length && <tr><td className="empty-state" colSpan={8}>No kit activity logged yet.</td></tr>}</tbody>
+      {status !== "LoadingFirstPage" && !results.length && <tr><td className="empty-state" colSpan={9}>No kit activity logged yet.</td></tr>}</tbody>
     </table></div>
     {status === "CanLoadMore" && <div style={{ textAlign: "center", padding: 16 }}><button className="button button--ghost" onClick={() => loadMore(50)}>Load more</button></div>}
   </section>;
@@ -182,7 +184,7 @@ function EditLoanDrawer({ loan, isAdmin, onClose }: { loan: Loan; isAdmin: boole
     setBusy(true); setError("");
     try {
       await update({
-        loanId: loan.id, borrowerName: value("borrowerName"), nickname: value("nickname"), phone: value("phone"), studentId: value("studentId"),
+        loanId: loan.id, borrowerName: value("borrowerName"), nickname: value("nickname"), phone: value("phone"), faculty: value("faculty") as (typeof FACULTIES)[number]["code"], studentId: value("studentId"),
         sport: value("sport"), note: value("note") || undefined,
         borrowedAt: new Date(value("borrowedAt")).getTime(), returnedAt: returned ? new Date(value("returnedAt")).getTime() : null,
       });
@@ -203,6 +205,7 @@ function EditLoanDrawer({ loan, isAdmin, onClose }: { loan: Loan; isAdmin: boole
         <div className="field field--wide"><label htmlFor="loan-name">ชื่อ - สกุล / Full name</label><input id="loan-name" className="input" name="borrowerName" required maxLength={100} defaultValue={loan.borrowerName} /></div>
         <div className="field"><label htmlFor="loan-nickname">Nickname</label><input id="loan-nickname" className="input" name="nickname" required maxLength={50} defaultValue={loan.nickname} /></div>
         <div className="field"><label htmlFor="loan-phone">Phone</label><input id="loan-phone" className="input" name="phone" type="tel" required maxLength={15} defaultValue={loan.phone} /></div>
+        <div className="field"><label htmlFor="loan-faculty">Faculty</label><select id="loan-faculty" className="select" name="faculty" required defaultValue={loan.faculty}><option value="" disabled>Choose faculty</option>{FACULTIES.map(f => <option key={f.code} value={f.code}>{f.code} · {f.thai}</option>)}</select></div>
         <div className="field"><label htmlFor="loan-student">Student ID</label><input id="loan-student" className="input" name="studentId" required pattern="[0-9]{10}" maxLength={10} defaultValue={loan.studentId} /></div>
         <div className="field"><label htmlFor="loan-sport">Sport / activity</label><input id="loan-sport" className="input" name="sport" required maxLength={100} defaultValue={loan.sport} /></div>
         <div className="field"><label htmlFor="loan-borrowed">Borrowed at</label><input id="loan-borrowed" className="input" name="borrowedAt" type="datetime-local" required defaultValue={toLocalInput(loan.borrowedAt)} /></div>

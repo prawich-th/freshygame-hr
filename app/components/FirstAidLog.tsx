@@ -9,6 +9,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Brand } from "./Brand";
 import { UploadError, UploadHeading } from "./self-upload/UploadLayout";
 import { errorMessage } from "../lib/errors";
+import { FirstAidContact } from "./FirstAidContact";
+import { FACULTIES, type FacultyCode } from "@/shared/faculties";
 
 type Mode = "borrow" | "return" | "handover";
 type Done = { mode: Mode; kit: number; sport?: string };
@@ -61,10 +63,10 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
               <div className="kit-grid">{kits.map(k => <button key={k.id} type="button" className={`kit-card ${k.current ? "kit-card--out" : "kit-card--available"}`} onClick={() => choose(k.id)}>
                 <span className="kit-card__head"><strong>กล่องที่ {k.number}</strong><span className={`pill ${k.current ? "pill--red" : "pill--green"}`}>{k.current ? "ถูกยืม" : "ว่าง"}</span></span>
                 {k.label && <small>{k.label}</small>}
-                {k.current ? <span className="kit-card__where"><b>{k.current.sport}</b><span>{k.current.nickname || k.current.name} · {formatTime(k.current.borrowedAt)}</span></span> : <span className="kit-card__where"><span>พร้อมให้ยืม / Available</span></span>}
+                {k.current ? <span className="kit-card__where"><b>{k.current.sport}</b><span>{k.current.nickname || k.current.name}{k.current.faculty && <> <FacultyTag code={k.current.faculty} /></>} · {formatTime(k.current.borrowedAt)}</span></span> : <span className="kit-card__where"><span>พร้อมให้ยืม / Available</span></span>}
               </button>)}</div>}
           </> : <>
-            <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? `อยู่กับ ${kit.current.name} (${kit.current.nickname}) · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}` : "พร้อมให้ยืม / Available"}</span></div></div>
+            <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? `อยู่กับ ${kit.current.name} (${kit.current.nickname})${kit.current.faculty ? ` ${kit.current.faculty}` : ""} · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}` : "พร้อมให้ยืม / Available"}</span></div></div>
             {kit.current && !activeMode && <>
               <UploadHeading title="ต้องการทำอะไร?">เลือก “คืนกล่อง” เมื่อนำกล่องกลับมาคืน หรือ “รับต่อ” เมื่อรับกล่องต่อจากกีฬาก่อนหน้าโดยตรง</UploadHeading>
               <div className="kit-actions">
@@ -76,6 +78,7 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
             {activeMode === "return" && <ReturnForm kitId={kit.id} onBack={() => setMode(null)} onDone={() => setDone({ mode: "return", kit: kit.number })} />}
             {(activeMode === "borrow" || activeMode === "handover") && <BorrowForm kitId={kit.id} handover={activeMode === "handover"} onBack={() => kit.current ? setMode(null) : reset()} onDone={sport => setDone({ mode: activeMode, kit: kit.number, sport })} />}
           </>}
+          <FirstAidContact />
         </div>
       </div>
     </main>
@@ -105,25 +108,27 @@ function BorrowForm({ kitId, handover, onBack, onDone }: { kitId: Id<"firstAidKi
   const [studentId, setStudentId] = useState("");
   const known = useKnownBorrower(studentId);
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(""); const [nickname, setNickname] = useState(""); const [phone, setPhone] = useState("");
+  const [name, setName] = useState(""); const [nickname, setNickname] = useState(""); const [phone, setPhone] = useState(""); const [faculty, setFaculty] = useState<FacultyCode | "">("");
   const [sport, setSport] = useState(""); const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   function changeStudentId(value: string) {
-    setStudentId(value); setEditing(false); setName(""); setNickname(""); setPhone("");
+    setStudentId(value); setEditing(false); setName(""); setNickname(""); setPhone(""); setFaculty("");
   }
   // Blank fields are filled from earlier logs on the server, so the full phone number is never sent to the page.
   function editKnown() {
     if (!known) return;
-    setEditing(true); setName(known.name); setNickname(known.nickname);
+    setEditing(true); setName(known.name); setNickname(known.nickname); setFaculty(isFaculty(known.faculty) ? known.faculty : "");
   }
   const lookingUp = /^\d{10}$/.test(studentId) && known === undefined;
   const showFields = studentId.length === 10 && !lookingUp && (!known || editing);
+  // Borrowers saved before faculty was collected are asked once, then it is remembered.
+  const showFaculty = showFields || (studentId.length === 10 && !!known && !known.faculty);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true); setError("");
     try {
-      await checkOut({ kitId, studentId, sport, note: note || undefined, handover, name: name || undefined, nickname: nickname || undefined, phone: phone || undefined });
+      await checkOut({ kitId, studentId, sport, note: note || undefined, handover, name: name || undefined, nickname: nickname || undefined, phone: phone || undefined, faculty: faculty || undefined });
       onDone(sport.trim());
     } catch (caught) { setError(errorMessage(caught, handover ? "Take over this kit" : "Borrow this kit")); }
     finally { setBusy(false); }
@@ -136,12 +141,13 @@ function BorrowForm({ kitId, handover, onBack, onDone }: { kitId: Id<"firstAidKi
         <legend>ผู้ยืม / Borrower</legend>
         <StudentIdField id="kit-student-id" value={studentId} onChange={changeStudentId} />
         {lookingUp && <p role="status" className="upload-help">กำลังตรวจสอบ / Checking…</p>}
-        {known && !editing && <div className="upload-person"><BadgeCheck size={24} /><div><strong>ยินดีต้อนรับกลับ {known.name} ({known.nickname})</strong><span>เบอร์โทร {known.phoneHint} · <button type="button" className="link-button" onClick={editKnown}>แก้ไขข้อมูล / Update details</button></span></div></div>}
+        {known && !editing && <div className="upload-person"><BadgeCheck size={24} /><div><strong>ยินดีต้อนรับกลับ {known.name} ({known.nickname}){known.faculty && <> <FacultyTag code={known.faculty} /></>}</strong><span>เบอร์โทร {known.phoneHint} · <button type="button" className="link-button" onClick={editKnown}>แก้ไขข้อมูล / Update details</button></span></div></div>}
         {showFields && <div className="form-grid">
           <div className="field field--wide"><label htmlFor="kit-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="kit-name" className="input" required={!known} maxLength={100} value={name} onChange={e => setName(e.target.value)} /></div>
           <div className="field"><label htmlFor="kit-nickname">ชื่อเล่น / Nickname <span>*</span></label><input id="kit-nickname" className="input" required={!known} maxLength={50} value={nickname} onChange={e => setNickname(e.target.value)} /></div>
           <div className="field"><label htmlFor="kit-phone">เบอร์โทร / Phone {!known && <span>*</span>}</label><input id="kit-phone" className="input" type="tel" inputMode="tel" required={!known} maxLength={15} placeholder={known ? `เว้นว่างเพื่อใช้ ${known.phoneHint}` : "0812345678"} value={phone} onChange={e => setPhone(e.target.value)} /></div>
         </div>}
+        {showFaculty && <FacultyChoice value={faculty} onChange={setFaculty} />}
       </fieldset>
       <fieldset className="upload-section" disabled={busy}>
         <legend>ใช้สำหรับ / Used for</legend>
@@ -151,7 +157,7 @@ function BorrowForm({ kitId, handover, onBack, onDone }: { kitId: Id<"firstAidKi
       <UploadError message={error} />
       <div className="upload-actions">
         <button type="button" className="button button--ghost" disabled={busy} onClick={onBack}>ย้อนกลับ / Back</button>
-        <button className="button button--primary" disabled={busy || studentId.length !== 10 || lookingUp}>{busy ? "กำลังบันทึก / Saving…" : <>{handover ? <ArrowRightLeft size={17} /> : <PackageOpen size={17} />} {handover ? "รับต่อ / Take over" : "ยืมกล่อง / Borrow"}</>}</button>
+        <button className="button button--primary" disabled={busy || studentId.length !== 10 || lookingUp || (showFaculty && !faculty)}>{busy ? "กำลังบันทึก / Saving…" : <>{handover ? <ArrowRightLeft size={17} /> : <PackageOpen size={17} />} {handover ? "รับต่อ / Take over" : "ยืมกล่อง / Borrow"}</>}</button>
       </div>
     </form>
   </>;
@@ -179,7 +185,7 @@ function ReturnForm({ kitId, onBack, onDone }: { kitId: Id<"firstAidKits">; onBa
       <fieldset className="upload-section" disabled={busy}>
         <legend>ผู้คืน / Returned by</legend>
         <StudentIdField id="kit-return-student-id" value={studentId} onChange={setStudentId} />
-        {known && <div className="upload-person"><BadgeCheck size={24} /><div><strong>{known.name} ({known.nickname})</strong><span>{studentId}</span></div></div>}
+        {known && <div className="upload-person"><BadgeCheck size={24} /><div><strong>{known.name} ({known.nickname}){known.faculty && <> <FacultyTag code={known.faculty} /></>}</strong><span>{studentId}</span></div></div>}
         {studentId.length === 10 && known === null && <div className="field"><label htmlFor="kit-return-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="kit-return-name" className="input" required maxLength={100} value={name} onChange={e => setName(e.target.value)} /></div>}
       </fieldset>
       <UploadError message={error} />
@@ -189,4 +195,19 @@ function ReturnForm({ kitId, onBack, onDone }: { kitId: Id<"firstAidKits">; onBa
       </div>
     </form>
   </>;
+}
+
+const isFaculty = (value: string): value is FacultyCode => FACULTIES.some(f => f.code === value);
+
+export function FacultyTag({ code }: { code: string }) {
+  return <span className="kit-faculty">{code}</span>;
+}
+
+function FacultyChoice({ value, onChange }: { value: FacultyCode | ""; onChange: (value: FacultyCode) => void }) {
+  return <div className="field">
+    <label id="kit-faculty-label">คณะ / Faculty <span>*</span></label>
+    <div className="kit-faculty-choice" role="radiogroup" aria-labelledby="kit-faculty-label">
+      {FACULTIES.map(f => <label key={f.code}><input type="radio" name="kit-faculty" value={f.code} required checked={value === f.code} onChange={() => onChange(f.code)} /><span><strong>{f.code}</strong><small>{f.thai}</small></span></label>)}
+    </div>
+  </div>;
 }
