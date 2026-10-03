@@ -71,3 +71,15 @@ test("registrars can correct log entries and retired kits leave the public page"
   await admin.mutation(api.firstAidKits.updateKit, { kitId: kits[1].id, label: "", active: false });
   expect((await t.query(api.firstAidKits.publicStatus, {})).map(k => k.number)).toEqual([1]);
 });
+
+test("public tracking shows today's sport sequence without personal identifiers", async () => {
+  const { t, kits } = await setup();
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Volleyball", studentId: "6909680002", name: "สมหญิง", nickname: "หญิง", phone: "0899999999", handover: true });
+  const tracking = await t.query(api.firstAidKits.publicTracking, { dayStart: 0 });
+  expect(tracking[0].current?.sport).toBe("Volleyball");
+  expect(tracking[0].today.map(m => [m.sport, m.nickname, m.returnedAt === null])).toEqual([["Football", "ชาย", false], ["Volleyball", "หญิง", true]]);
+  expect(tracking[1].today).toEqual([]);
+  const json = JSON.stringify(tracking);
+  for (const secret of ["6909680001", "6909680002", "0812345678", "0899999999"]) expect(json).not.toContain(secret);
+});

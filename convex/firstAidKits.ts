@@ -162,6 +162,28 @@ export const publicStatus = query({
   },
 });
 
+const publicMovement = v.object({ sport: v.string(), nickname: v.string(), borrowedAt: v.number(), returnedAt: v.union(v.number(), v.null()) });
+
+/** Read-only public tracking: where each kit is and which sports it has visited since `dayStart`. */
+export const publicTracking = query({
+  args: { dayStart: v.number() },
+  returns: v.array(publicKit.extend({ today: v.array(publicMovement) })),
+  handler: async (ctx, { dayStart }) => {
+    // Only recent history is public; older entries stay in the staff log.
+    const since = Math.max(dayStart, Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const kits = await ctx.db.query("firstAidKits").withIndex("by_number").take(MAX_KITS);
+    return Promise.all(kits.filter(kit => kit.active).map(async kit => {
+      const current = await openLoan(ctx, kit._id);
+      const today = await ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_borrowedAt", q => q.eq("kitId", kit._id).gte("borrowedAt", since)).take(30);
+      return {
+        id: kit._id, number: kit.number, label: kit.label ?? "",
+        current: current ? { name: current.borrowerName, nickname: current.nickname, sport: current.sport, borrowedAt: current.borrowedAt } : null,
+        today: today.map(row => ({ sport: row.sport, nickname: row.nickname, borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null })),
+      };
+    }));
+  },
+});
+
 /** Sport names for the public form's suggestions; borrowers can still type any activity. */
 export const sportOptions = query({
   args: {},

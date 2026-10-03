@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, ArrowRightLeft, BadgeCheck, BriefcaseMedical, Check, PackageCheck, PackageOpen, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BadgeCheck, BriefcaseMedical, Check, MapPin, PackageCheck, PackageOpen, Undo2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Brand } from "./Brand";
@@ -48,7 +48,7 @@ export function FirstAidLog() {
             <li><b>02</b><div><strong>ยืม คืน หรือรับต่อ</strong><span>Borrow, return, or take over</span></div></li>
             <li><b>03</b><div><strong>บันทึกเรียบร้อย</strong><span>Logged</span></div></li>
           </ol>
-          <div className="upload-sidebar__note"><BriefcaseMedical size={21} /><p>หากกล่องถูกส่งต่อให้กีฬาถัดไปโดยตรง ให้ผู้รับเลือก “รับต่อ” เพื่อบันทึกการคืนและการยืมพร้อมกัน</p></div>
+          <div className="upload-sidebar__note"><BriefcaseMedical size={21} /><p>หากกล่องถูกส่งต่อให้กีฬาถัดไปโดยตรง ให้ผู้รับเลือก “รับต่อ” เพื่อบันทึกการคืนและการยืมพร้อมกัน<br /><Link className="link-button" href="/first-aid/track"><MapPin size={13} /> ดูว่ากล่องอยู่ที่ไหน / Track kits</Link></p></div>
         </aside>
         <div className="upload-content">
           {done ? <FirstAidDone done={done} onReset={reset} /> : !kit ? <>

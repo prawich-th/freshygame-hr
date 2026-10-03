@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useConvex, useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { BriefcaseMedical, Download, ExternalLink, PackageCheck, PackageOpen, Pencil, Trash2, X } from "lucide-react";
+import { BriefcaseMedical, Download, ExternalLink, MapPin, PackageCheck, PackageOpen, Pencil, Trash2, X } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
@@ -55,7 +55,7 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
     </div>
     {error && <div role="alert" className="notice notice--error" style={{ marginBottom: 16 }}>{error}</div>}
     <section className="panel" style={{ marginBottom: 20 }}>
-      <div className="panel__head"><h2>Where each kit is now</h2><div className="filters"><Link className="button button--soft" href="/first-aid" target="_blank"><ExternalLink size={14} /> Public logging page</Link></div></div>
+      <div className="panel__head"><h2>Where each kit is now</h2><div className="filters"><Link className="button button--soft" href="/first-aid" target="_blank"><ExternalLink size={14} /> Public logging page</Link><Link className="button button--soft" href="/first-aid/track" target="_blank"><MapPin size={14} /> Public tracking page</Link></div></div>
       {kits === undefined ? <p className="empty-state" role="status">Loading kits…</p> : !active.length ? <p className="empty-state">No first aid kits yet.{role === "admin" ? " Add kits below." : " Ask an administrator to add them."}</p> :
         <div className="kit-grid kit-grid--staff">{active.map(kit => <article key={kit.id} className={`kit-card ${kit.current ? "kit-card--out" : "kit-card--available"}`}>
           <span className="kit-card__head"><strong>Kit {kit.number}</strong><span className={`pill ${kit.current ? "pill--red" : "pill--green"}`}>{kit.current ? "OUT" : "AVAILABLE"}</span></span>

@@ -47,7 +47,7 @@ export default function Home() {
 
         <div className="staff-access">
           <div><span className="staff-access__icon"><BriefcaseMedical size={18} /></span><span><strong>ยืม–คืนกล่องปฐมพยาบาล</strong><small>บันทึกการยืม คืน และส่งต่อกล่องปฐมพยาบาลระหว่างกีฬา ไม่ต้องเข้าสู่ระบบ</small></span></div>
-          <Link href="/first-aid">บันทึก <ArrowRight size={16} /></Link>
+          <div className="staff-access__links"><Link href="/first-aid/track">ติดตามกล่อง</Link><Link href="/first-aid">บันทึก <ArrowRight size={16} /></Link></div>
         </div>
 
         <div className="staff-access">

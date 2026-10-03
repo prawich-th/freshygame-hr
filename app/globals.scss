@@ -67,7 +67,8 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
 .staff-access > div > span:last-child { display: flex; flex-direction: column; gap: 2px; }
 .staff-access strong { font-size: 13px; }
 .staff-access small { color: $muted; font-size: 11px; }
-.staff-access > a { min-height: 40px; padding: 0 14px; border-radius: 9px; background: white; color: $brown; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 12px; font-weight: 800; border: 1px solid $line; }
+.staff-access > a, .staff-access__links a { min-height: 40px; padding: 0 14px; border-radius: 9px; background: white; color: $brown; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 12px; font-weight: 800; border: 1px solid $line; }
+.staff-access__links { display: flex; gap: 8px; flex-wrap: wrap; }
 .hero__actions { display: flex; gap: 12px; margin: 30px 0 22px; flex-wrap: wrap; }
 .button { border: 0; border-radius: 12px; min-height: 42px; padding: 0 17px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 750; font-size: 13px; transition: transform .18s, box-shadow .18s, background .18s; }
 .button:hover { transform: translateY(-1px); }
@@ -769,3 +770,14 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-log__muted { color: #99908b; font-size: 9px; }
 .landing .staff-access + .staff-access { margin-top: 10px; }
 @media (max-width: 560px) { .kit-actions { grid-template-columns: 1fr; } .kit-grid { grid-template-columns: 1fr; } }
+.kit-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.kit-timeline { flex-direction: column; align-items: stretch; gap: 6px; }
+.kit-timeline > span { font-weight: 700; }
+.kit-timeline ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.kit-timeline li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 6px; align-items: center; color: $muted; }
+.kit-timeline li b { color: $ink; font-weight: 600; }
+.kit-timeline li span { overflow-wrap: anywhere; }
+.kit-timeline li time { white-space: nowrap; }
+.kit-timeline li.is-current, .kit-timeline li.is-current b { color: $brown; font-weight: 700; }
+.kit-timeline em { font-style: normal; }
+.upload-sidebar__note .link-button { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; }
