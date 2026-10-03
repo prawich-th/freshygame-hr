@@ -17,20 +17,23 @@ export function formatTime(value: number) {
   return new Date(value).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Public, account-free page for borrowing and returning first aid kits. */
-export function FirstAidLog() {
+/**
+ * Public, account-free page for borrowing and returning first aid kits.
+ * `kitNumber` comes from a kit's own link (e.g. a QR code on the box) and preselects it.
+ */
+export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
   const kits = useQuery(api.firstAidKits.publicStatus);
   const [kitId, setKitId] = useState<Id<"firstAidKits"> | null>(null);
+  const [fromLink, setFromLink] = useState(kitNumber !== undefined);
   const [mode, setMode] = useState<Mode | null>(null);
   const [done, setDone] = useState<Done | null>(null);
-  const kit = kits?.find(k => k.id === kitId);
+  const kit = kitId ? kits?.find(k => k.id === kitId) : fromLink ? kits?.find(k => k.number === kitNumber) : undefined;
+  const missingLinkedKit = fromLink && kits !== undefined && !kit;
+  // An available kit goes straight to borrowing; a kit that is out asks what to do.
+  const activeMode = mode ?? (kit && !kit.current ? "borrow" : null);
 
-  function choose(id: Id<"firstAidKits">) {
-    const next = kits?.find(k => k.id === id);
-    setKitId(id); setDone(null);
-    setMode(next?.current ? null : "borrow");
-  }
-  function reset() { setKitId(null); setMode(null); setDone(null); }
+  function choose(id: Id<"firstAidKits">) { setKitId(id); setMode(null); setDone(null); }
+  function reset() { setKitId(null); setFromLink(false); setMode(null); setDone(null); }
 
   return (
     <main className="self-upload-page">
@@ -52,6 +55,7 @@ export function FirstAidLog() {
         </aside>
         <div className="upload-content">
           {done ? <FirstAidDone done={done} onReset={reset} /> : !kit ? <>
+            {missingLinkedKit && <div className="notice notice--error" role="alert" style={{ marginBottom: 18 }}>ไม่พบกล่องที่ {kitNumber} หรือกล่องนี้เลิกใช้งานแล้ว กรุณาเลือกกล่องด้านล่าง / Kit {kitNumber} was not found or is retired. Choose a kit below.</div>}
             <UploadHeading title="เลือกกล่องปฐมพยาบาล">แตะกล่องที่ต้องการยืมหรือคืน<br />Tap the kit you are borrowing or returning.</UploadHeading>
             {kits === undefined ? <p role="status">กำลังโหลด / Loading…</p> : kits.length === 0 ? <div className="notice notice--info">ยังไม่มีกล่องในระบบ กรุณาติดต่อเจ้าหน้าที่ / No kits have been set up yet. Please contact staff.</div> :
               <div className="kit-grid">{kits.map(k => <button key={k.id} type="button" className={`kit-card ${k.current ? "kit-card--out" : "kit-card--available"}`} onClick={() => choose(k.id)}>
@@ -61,7 +65,7 @@ export function FirstAidLog() {
               </button>)}</div>}
           </> : <>
             <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? `อยู่กับ ${kit.current.name} (${kit.current.nickname}) · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}` : "พร้อมให้ยืม / Available"}</span></div></div>
-            {kit.current && !mode && <>
+            {kit.current && !activeMode && <>
               <UploadHeading title="ต้องการทำอะไร?">เลือก “คืนกล่อง” เมื่อนำกล่องกลับมาคืน หรือ “รับต่อ” เมื่อรับกล่องต่อจากกีฬาก่อนหน้าโดยตรง</UploadHeading>
               <div className="kit-actions">
                 <button type="button" className="kit-action" onClick={() => setMode("return")}><Undo2 size={22} /><strong>คืนกล่อง</strong><span>Return this kit</span></button>
@@ -69,8 +73,8 @@ export function FirstAidLog() {
               </div>
               <div className="upload-actions"><button type="button" className="button button--ghost" onClick={reset}>เลือกกล่องอื่น / Choose another kit</button></div>
             </>}
-            {mode === "return" && <ReturnForm kitId={kit.id} onBack={() => setMode(null)} onDone={() => setDone({ mode: "return", kit: kit.number })} />}
-            {(mode === "borrow" || mode === "handover") && <BorrowForm kitId={kit.id} handover={mode === "handover"} onBack={() => kit.current ? setMode(null) : reset()} onDone={sport => setDone({ mode, kit: kit.number, sport })} />}
+            {activeMode === "return" && <ReturnForm kitId={kit.id} onBack={() => setMode(null)} onDone={() => setDone({ mode: "return", kit: kit.number })} />}
+            {(activeMode === "borrow" || activeMode === "handover") && <BorrowForm kitId={kit.id} handover={activeMode === "handover"} onBack={() => kit.current ? setMode(null) : reset()} onDone={sport => setDone({ mode: activeMode, kit: kit.number, sport })} />}
           </>}
         </div>
       </div>

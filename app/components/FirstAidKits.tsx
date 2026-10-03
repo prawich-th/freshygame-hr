@@ -10,6 +10,7 @@ import type { FunctionReturnType } from "convex/server";
 import { errorMessage } from "../lib/errors";
 import { formatTime } from "./FirstAidLog";
 import { downloadFirstAidCsv } from "../lib/firstAidCsv";
+import { FirstAidKitLinks } from "./FirstAidKitLinks";
 
 type Loan = FunctionReturnType<typeof api.firstAidKits.log>["page"][number];
 
@@ -69,6 +70,7 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
         </article>)}</div>}
     </section>
     <LogPanel kits={kits ?? []} results={results} status={status} loadMore={loadMore} kitFilter={kitFilter} setKitFilter={setKitFilter} canEdit={canEdit} onEdit={setEditing} />
+    {kits && active.length > 0 && <FirstAidKitLinks kits={active} />}
     {role === "admin" && kits && <ManageKits kits={kits} />}
     {editing && <EditLoanDrawer loan={editing} isAdmin={role === "admin"} onClose={() => setEditing(null)} />}
   </>;

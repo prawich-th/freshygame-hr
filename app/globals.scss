@@ -781,3 +781,13 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-timeline li.is-current, .kit-timeline li.is-current b { color: $brown; font-weight: 700; }
 .kit-timeline em { font-style: normal; }
 .upload-sidebar__note .link-button { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; }
+.kit-card__link { color: inherit; text-decoration: underline; text-decoration-color: #d9cec6; text-underline-offset: 3px; }
+.kit-card__link:hover { color: $brown; }
+.kit-qr-grid { margin-top: 18px; }
+.kit-qr { align-items: center; text-align: center; }
+.kit-qr .kit-card__head { width: 100%; }
+.kit-qr img, .kit-qr__placeholder { width: 100%; max-width: 170px; aspect-ratio: 1; border-radius: 8px; }
+.kit-qr__placeholder { display: grid; place-items: center; background: #f6f3f0; color: $muted; font-size: 12px; }
+.kit-qr code { max-width: 100%; color: $muted; font-size: 10px; overflow-wrap: anywhere; }
+.kit-qr__actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.kit-qr__actions .button { min-height: 32px; padding: 0 11px; font-size: 11px; }
