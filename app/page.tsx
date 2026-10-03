@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Camera, CreditCard, LockKeyhole, Phone, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
+import { ArrowRight, BriefcaseMedical, Camera, CreditCard, LockKeyhole, Phone, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
 import { Brand } from "./components/Brand";
 
 export default function Home() {
@@ -43,6 +43,11 @@ export default function Home() {
             </ul>
             <div className="prep-card__note"><Phone size={16} /><span>เตรียมรหัสนักศึกษาและเบอร์โทรศัพท์ที่ใช้ลงทะเบียน</span></div>
           </aside>
+        </div>
+
+        <div className="staff-access">
+          <div><span className="staff-access__icon"><BriefcaseMedical size={18} /></span><span><strong>ยืม–คืนกล่องปฐมพยาบาล</strong><small>บันทึกการยืม คืน และส่งต่อกล่องปฐมพยาบาลระหว่างกีฬา ไม่ต้องเข้าสู่ระบบ</small></span></div>
+          <Link href="/first-aid">บันทึก <ArrowRight size={16} /></Link>
         </div>
 
         <div className="staff-access">

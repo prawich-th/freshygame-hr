@@ -95,6 +95,43 @@ export default defineSchema({
     attempts: v.number(),
   }).index("identifier", ["identifier"]),
 
+  firstAidKits: defineTable({
+    number: v.number(),
+    label: v.optional(v.string()),
+    active: v.boolean(),
+  }).index("by_number", ["number"]),
+
+  // Contact details remembered from earlier logs so returning borrowers only need their student ID.
+  firstAidBorrowers: defineTable({
+    studentId: v.string(),
+    name: v.string(),
+    nickname: v.string(),
+    phone: v.string(),
+    updatedAt: v.number(),
+  }).index("by_studentId", ["studentId"]),
+
+  // One row per checkout. An open loan (returnedAt unset) means the kit is currently out.
+  firstAidKitLoans: defineTable({
+    kitId: v.id("firstAidKits"),
+    kitNumber: v.number(),
+    borrowerName: v.string(),
+    nickname: v.string(),
+    phone: v.string(),
+    studentId: v.string(),
+    sport: v.string(),
+    borrowedAt: v.number(),
+    returnedAt: v.optional(v.number()),
+    note: v.optional(v.string()),
+    // Logging is open to anyone; staff accounts are recorded only when signed in.
+    borrowedBy: v.optional(v.id("users")),
+    returnerName: v.optional(v.string()),
+    returnerStudentId: v.optional(v.string()),
+    returnedBy: v.optional(v.id("users")),
+  })
+    .index("by_borrowedAt", ["borrowedAt"])
+    .index("by_kitId_and_borrowedAt", ["kitId", "borrowedAt"])
+    .index("by_kitId_and_returnedAt", ["kitId", "returnedAt"]),
+
   participantRemovalJobs: defineTable({
     sport: v.optional(v.string()),
     skippedCount: v.optional(v.number()),

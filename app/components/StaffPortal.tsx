@@ -17,7 +17,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { Activity, BadgeCheck, Bell, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, Menu, LogOut, Pencil, Save, ScrollText, Search, Smartphone, Trash2, UserCog, UsersRound, X } from "lucide-react";
+import { Activity, BadgeCheck, Bell, BriefcaseMedical, Check, ChevronRight, CircleGauge, Download, FileDown, FileSpreadsheet, FolderUp, ListFilter, Menu, LogOut, Pencil, Save, ScrollText, Search, Smartphone, Trash2, UserCog, UsersRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, type InputHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +25,7 @@ import { participantKind, kindLabel, SUPPORT_TYPES, PARADE_TYPES, type Participa
 import { normalizeSport } from "@/shared/sports";
 import { SportCatalog, useSportCatalog } from "./SportCatalog";
 import { ParticipantSelection } from "./ParticipantSelection";
+import { FirstAidKits } from "./FirstAidKits";
 import { Brand } from "./Brand";
 import { downloadParticipantCsv, type ParticipantContact } from "../lib/participantCsv";
 import { generateParticipantPdf } from "../lib/participantPdf";
@@ -36,10 +37,10 @@ type Tab = "sports" | "participants" | "import" | "staff" | "audit";
 const statusLabel = { incomplete: "Incomplete", pending: "Pending review", verified: "Verified", rejected: "Needs correction" };
 const statusClass = { incomplete: "pill--gray", pending: "pill--amber", verified: "pill--green", rejected: "pill--red" };
 
-export function StaffPortal({selectionPage = false, directoryPage = false}: {selectionPage?: boolean; directoryPage?: boolean}) {
+export function StaffPortal({selectionPage = false, directoryPage = false, firstAidPage = false}: {selectionPage?: boolean; directoryPage?: boolean; firstAidPage?: boolean}) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   if (isLoading) return <div className="auth-page"><span className="spinner" style={{color:"#4b2f25"}} /></div>;
-  return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} directoryPage={directoryPage} /> : <StaffAuth />;
+  return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} directoryPage={directoryPage} firstAidPage={firstAidPage} /> : <StaffAuth />;
 }
 
 function StaffAuth() {
@@ -77,7 +78,9 @@ function DirectoryRedirect() {
   return <div className="auth-page" role="status">Opening contact directory…</div>;
 }
 
-function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean; directoryPage: boolean}) {
+function StaffWorkspace({selectionPage: selectionRoute, directoryPage, firstAidPage}: {selectionPage: boolean; directoryPage: boolean; firstAidPage: boolean}) {
+  // Standalone staff routes replace the tabbed participant workspace.
+  const selectionPage = selectionRoute || firstAidPage;
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -98,7 +101,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
   }, [menuOpen]);
   const { signOut } = useAuthActions();
   const current = useQuery(api.participants.currentStaff);
-  const stats = useQuery(api.participants.stats, !directoryPage && current && current.role !== "co-sport" ? {} : "skip");
+  const stats = useQuery(api.participants.stats, !directoryPage && !firstAidPage && current && current.role !== "co-sport" ? {} : "skip");
   const bootstrap = useMutation(api.participants.bootstrapAdmin);
   const [workspaceError, setWorkspaceError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -120,7 +123,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
       { id: "audit" as const, label: "Audit log", icon: ScrollText },
     ] : []),
   ];
-  const title = selectionPage ? "Participant selection by sport" : tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "sports" ? "Sports & categories" : tab === "staff" ? "Staff access control" : "Security audit log";
+  const title = firstAidPage ? "First aid kits" : selectionPage ? "Participant selection by sport" : tab === "participants" ? "Participant overview" : tab === "import" ? "Import participant data" : tab === "sports" ? "Sports & categories" : tab === "staff" ? "Staff access control" : "Security audit log";
 
   return <main className="staff-shell">
     <aside ref={sidebar} id="staff-sidebar" className={`sidebar ${menuOpen ? "sidebar--open" : ""}`} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? true : undefined} aria-label="Staff navigation" onKeyDown={event => {
@@ -132,7 +135,7 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
-    }}><button className="sidebar__close" onClick={closeMenu} aria-label="Close navigation"><X size={24}/></button><Brand compact/><nav className="sidebar__nav"><Link href="/staff/directory" aria-label="Contact directory" title="Contact directory" onClick={closeMenu}><Search size={17}/><span>Contact directory</span></Link>{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={!selectionPage && tab === id ? "active" : ""} onClick={() => { closeMenu(); if(selectionPage) router.push("/staff"); else setTab(id); }}><Icon size={17}/><span>{label}</span></button>)}{current.role === "admin" && <Link className={selectionPage ? "active" : ""} href="/staff/selection" aria-label="Selection by sport" title="Selection by sport" aria-current={selectionPage ? "page" : undefined} onClick={closeMenu}><ListFilter size={17}/><span>Selection by sport</span></Link>}</nav>
+    }}><button className="sidebar__close" onClick={closeMenu} aria-label="Close navigation"><X size={24}/></button><Brand compact/><nav className="sidebar__nav"><Link href="/staff/directory" aria-label="Contact directory" title="Contact directory" onClick={closeMenu}><Search size={17}/><span>Contact directory</span></Link>{nav.map(({id,label,icon:Icon}) => <button key={id} aria-label={label} title={label} className={!selectionPage && tab === id ? "active" : ""} onClick={() => { closeMenu(); if(selectionPage) router.push("/staff"); else setTab(id); }}><Icon size={17}/><span>{label}</span></button>)}<Link className={firstAidPage ? "active" : ""} href="/staff/first-aid" aria-label="First aid kits" title="First aid kits" aria-current={firstAidPage ? "page" : undefined} onClick={closeMenu}><BriefcaseMedical size={17}/><span>First aid kits</span></Link>{current.role === "admin" && <Link className={selectionRoute ? "active" : ""} href="/staff/selection" aria-label="Selection by sport" title="Selection by sport" aria-current={selectionRoute ? "page" : undefined} onClick={closeMenu}><ListFilter size={17}/><span>Selection by sport</span></Link>}</nav>
       <div className="sidebar__bottom"><div className="sidebar__user"><span className="sidebar__avatar">{initials(current.name)}</span><div><strong>{current.name}</strong><span>{current.role}</span></div><button title="Sign out" onClick={() => void signOut()}><LogOut size={15}/></button></div></div>
     </aside>
     <section className="staff-main" inert={menuOpen}>
@@ -140,7 +143,8 @@ function StaffWorkspace({selectionPage, directoryPage}: {selectionPage: boolean;
       {workspaceError && <div role="alert" className="notice notice--error">{workspaceError}</div>}
       {current.canBootstrap && <div className="notice notice--info" style={{marginBottom:16}}>No administrator exists yet. <button className="button button--soft" style={{marginLeft:8,minHeight:30}} onClick={() => { setWorkspaceError(""); void bootstrap().catch(error => setWorkspaceError(errorMessage(error, "Set up administrator access"))); }}>Make me the first admin</button></div>}
       {!selectionPage && tab === "participants" && <ParticipantDashboard stats={stats} selectedId={selectedId} setSelectedId={setSelectedId} canEdit={current.role !== "viewer"}/>}
-      {selectionPage && (current.role === "admin" ? <ParticipantSelection /> : <div className="notice notice--error">Only administrators can manage participant selection.</div>)}
+      {firstAidPage && <FirstAidKits role={current.role} />}
+      {selectionRoute && (current.role === "admin" ? <ParticipantSelection /> : <div className="notice notice--error">Only administrators can manage participant selection.</div>)}
       {creating && current.role !== "viewer" && <CreateParticipantDrawer onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setSelectedId(id); }} />}
       {tab === "import" && <ImportPanel />}
       {!selectionPage && tab === "sports" && current.role === "admin" && <SportCatalog />}
