@@ -803,3 +803,4 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-faculty-choice small { color: $muted; font-size: 10px; line-height: 1.4; }
 .kit-faculty-choice input:checked + span { border-color: $brown; background: #f5eee7; box-shadow: 0 0 0 3px rgba(75,47,37,.08); }
 .kit-faculty-choice input:focus-visible + span { outline: 2px solid $brown; outline-offset: 2px; }
+.kit-phone { color: $brown; font-weight: 800; white-space: nowrap; }

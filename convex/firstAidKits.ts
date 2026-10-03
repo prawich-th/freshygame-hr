@@ -30,12 +30,12 @@ const loan = v.object({
   returnedByName: v.union(v.string(), v.null()),
 });
 
-// Public status deliberately omits student IDs and phone numbers.
+// Public status omits student IDs; the current holder's phone is shown so anyone can reach the kit.
 const publicKit = v.object({
   id: v.id("firstAidKits"),
   number: v.number(),
   label: v.string(),
-  current: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), sport: v.string(), borrowedAt: v.number() }), v.null()),
+  current: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), phone: v.string(), sport: v.string(), borrowedAt: v.number() }), v.null()),
 });
 
 const kitOverview = v.object({
@@ -162,7 +162,7 @@ export const publicStatus = query({
       const current = await openLoan(ctx, kit._id);
       return {
         id: kit._id, number: kit.number, label: kit.label ?? "",
-        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", sport: current.sport, borrowedAt: current.borrowedAt } : null,
+        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", phone: current.phone, sport: current.sport, borrowedAt: current.borrowedAt } : null,
       };
     }));
   },
@@ -183,7 +183,7 @@ export const publicTracking = query({
       const today = await ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_borrowedAt", q => q.eq("kitId", kit._id).gte("borrowedAt", since)).take(30);
       return {
         id: kit._id, number: kit.number, label: kit.label ?? "",
-        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", sport: current.sport, borrowedAt: current.borrowedAt } : null,
+        current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", phone: current.phone, sport: current.sport, borrowedAt: current.borrowedAt } : null,
         today: today.map(row => ({ sport: row.sport, nickname: row.nickname, faculty: row.faculty ?? "", borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null })),
       };
     }));

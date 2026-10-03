@@ -22,8 +22,8 @@ test("anyone can borrow and return without an account, and repeat borrowers only
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
   const status = await t.query(api.firstAidKits.publicStatus, {});
   expect(status[0].current).toMatchObject({ name: "สมชาย ใจดี", nickname: "ชาย", sport: "Football" });
+  expect(status[0].current?.phone).toBe("0812345678");
   expect(JSON.stringify(status)).not.toContain("6909680001");
-  expect(JSON.stringify(status)).not.toContain("0812345678");
   await t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId });
 
   expect(await t.query(api.firstAidKits.knownBorrower, { studentId: person.studentId })).toEqual({ name: "สมชาย ใจดี", nickname: "ชาย", faculty: "MED", phoneHint: "•••-•••-5678" });
@@ -73,14 +73,15 @@ test("registrars can correct log entries and retired kits leave the public page"
   expect((await t.query(api.firstAidKits.publicStatus, {})).map(k => k.number)).toEqual([1]);
 });
 
-test("public tracking shows today's sport sequence without personal identifiers", async () => {
+test("public tracking shows today's sport sequence and only the current holder's phone", async () => {
   const { t, kits } = await setup();
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Volleyball", studentId: "6909680002", name: "สมหญิง", nickname: "หญิง", phone: "0899999999", faculty: "L'ARTs", handover: true });
   const tracking = await t.query(api.firstAidKits.publicTracking, { dayStart: 0 });
-  expect(tracking[0].current?.sport).toBe("Volleyball");
+  expect(tracking[0].current).toMatchObject({ sport: "Volleyball", phone: "0899999999" });
   expect(tracking[0].today.map(m => [m.sport, m.nickname, m.faculty, m.returnedAt === null])).toEqual([["Football", "ชาย", "MED", false], ["Volleyball", "หญิง", "L'ARTs", true]]);
   expect(tracking[1].today).toEqual([]);
   const json = JSON.stringify(tracking);
-  for (const secret of ["6909680001", "6909680002", "0812345678", "0899999999"]) expect(json).not.toContain(secret);
+  // Only the current holder's phone is public; past borrowers' phones and all student IDs stay hidden.
+  for (const secret of ["6909680001", "6909680002", "0812345678"]) expect(json).not.toContain(secret);
 });

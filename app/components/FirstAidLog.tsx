@@ -63,10 +63,10 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
               <div className="kit-grid">{kits.map(k => <button key={k.id} type="button" className={`kit-card ${k.current ? "kit-card--out" : "kit-card--available"}`} onClick={() => choose(k.id)}>
                 <span className="kit-card__head"><strong>กล่องที่ {k.number}</strong><span className={`pill ${k.current ? "pill--red" : "pill--green"}`}>{k.current ? "ถูกยืม" : "ว่าง"}</span></span>
                 {k.label && <small>{k.label}</small>}
-                {k.current ? <span className="kit-card__where"><b>{k.current.sport}</b><span>{k.current.nickname || k.current.name}{k.current.faculty && <> <FacultyTag code={k.current.faculty} /></>} · {formatTime(k.current.borrowedAt)}</span></span> : <span className="kit-card__where"><span>พร้อมให้ยืม / Available</span></span>}
+                {k.current ? <span className="kit-card__where"><b>{k.current.sport}</b><span>{k.current.nickname || k.current.name}{k.current.faculty && <> <FacultyTag code={k.current.faculty} /></>} · {k.current.phone} · {formatTime(k.current.borrowedAt)}</span></span> : <span className="kit-card__where"><span>พร้อมให้ยืม / Available</span></span>}
               </button>)}</div>}
           </> : <>
-            <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? `อยู่กับ ${kit.current.name} (${kit.current.nickname})${kit.current.faculty ? ` ${kit.current.faculty}` : ""} · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}` : "พร้อมให้ยืม / Available"}</span></div></div>
+            <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? <>{`อยู่กับ ${kit.current.name} (${kit.current.nickname})${kit.current.faculty ? ` ${kit.current.faculty}` : ""} · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}`} · โทร <a className="kit-phone" href={`tel:${kit.current.phone}`}>{kit.current.phone}</a></> : "พร้อมให้ยืม / Available"}</span></div></div>
             {kit.current && !activeMode && <>
               <UploadHeading title="ต้องการทำอะไร?">เลือก “คืนกล่อง” เมื่อนำกล่องกลับมาคืน หรือ “รับต่อ” เมื่อรับกล่องต่อจากกีฬาก่อนหน้าโดยตรง</UploadHeading>
               <div className="kit-actions">

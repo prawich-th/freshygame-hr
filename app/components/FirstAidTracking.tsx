@@ -55,7 +55,7 @@ export function FirstAidTracking() {
             <div className="kit-grid">{shown.map(kit => <article key={kit.id} className={`kit-card ${kit.current ? "kit-card--out" : "kit-card--available"}`}>
               <span className="kit-card__head"><Link className="kit-card__link" href={kitPath(kit.number)} aria-label={`ยืมหรือคืนกล่องที่ ${kit.number} / Borrow or return kit ${kit.number}`}><strong>กล่องที่ {kit.number}</strong></Link><span className={`pill ${kit.current ? "pill--red" : "pill--green"}`}>{kit.current ? "ถูกยืม" : "ว่าง"}</span></span>
               {kit.label && <small>{kit.label}</small>}
-              <span className="kit-card__where">{kit.current ? <><b>{kit.current.sport}</b><span>{kit.current.nickname || kit.current.name}{kit.current.faculty && <> <FacultyTag code={kit.current.faculty} /></>} · ตั้งแต่ {formatTime(kit.current.borrowedAt)}</span></> : <span>พร้อมให้ยืม / Available</span>}</span>
+              <span className="kit-card__where">{kit.current ? <><b>{kit.current.sport}</b><span>{kit.current.nickname || kit.current.name}{kit.current.faculty && <> <FacultyTag code={kit.current.faculty} /></>} · ตั้งแต่ {formatTime(kit.current.borrowedAt)}</span><span>โทร <a href={`tel:${kit.current.phone}`}>{kit.current.phone}</a></span></> : <span>พร้อมให้ยืม / Available</span>}</span>
               <div className="kit-card__foot kit-timeline">
                 <span>วันนี้ / Today</span>
                 {kit.today.length ? <ol>{kit.today.map(move => <li key={move.borrowedAt} className={move.returnedAt === null ? "is-current" : ""}>
