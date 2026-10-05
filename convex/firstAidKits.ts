@@ -86,21 +86,51 @@ export async function savedBorrower(ctx: QueryCtx | MutationCtx, studentId: stri
   return ctx.db.query("firstAidBorrowers").withIndex("by_studentId", q => q.eq("studentId", studentId)).unique();
 }
 
+export type KnownPerson = { name: string; nickname: string; phone: string; faculty: string };
+
+function facultyCode(value?: string) {
+  const v = value?.trim() ?? "";
+  return FACULTIES.find(f => f.code.toLowerCase() === v.toLowerCase() || f.thai === v)?.code ?? "";
+}
+
+function validPhone(value?: string) {
+  try { return value ? cleanPhone(value) : ""; } catch { return ""; }
+}
+
 /**
- * Resolve a person's details, filling blanks from their earlier logs and remembering
+ * Look up what is already known about a student ID: details they gave in an earlier kit log
+ * win, then their participant registration fills any gaps. Returns null when neither exists.
+ */
+export async function knownPerson(ctx: QueryCtx | MutationCtx, studentId: string): Promise<KnownPerson | null> {
+  const saved = await savedBorrower(ctx, studentId);
+  const registrations = (await ctx.db.query("participants").withIndex("by_studentId", q => q.eq("studentId", studentId)).take(20))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!saved && !registrations.length) return null;
+  const first = (pick: (p: typeof registrations[number]) => string) => registrations.map(pick).find(Boolean) ?? "";
+  return {
+    name: saved?.name || first(p => p.fullNameThai?.trim() || p.fullNameEnglish?.trim()),
+    nickname: saved?.nickname || first(p => p.nicknameThai?.trim() || p.nicknameEnglish?.trim() || ""),
+    phone: saved?.phone || first(p => validPhone(p.phone)),
+    faculty: saved?.faculty || first(p => facultyCode(p.facultyCode) || facultyCode(p.faculty)),
+  };
+}
+
+/**
+ * Resolve a person's details, filling blanks from what is already known and remembering
  * anything new so the next visit only needs a student ID.
  */
 async function resolvePerson(ctx: MutationCtx, args: { studentId: string; name?: string; nickname?: string; phone?: string; faculty?: string }) {
   const studentId = cleanStudentId(args.studentId);
   const saved = await savedBorrower(ctx, studentId);
+  const known = await knownPerson(ctx, studentId);
   const pick = (value: string | undefined, fallback: string | undefined) => value?.trim() || fallback || "";
-  const rawName = pick(args.name, saved?.name);
-  const rawNickname = pick(args.nickname, saved?.nickname);
-  const rawPhone = pick(args.phone, saved?.phone);
+  const rawName = pick(args.name, known?.name);
+  const rawNickname = pick(args.nickname, known?.nickname);
+  const rawPhone = pick(args.phone, known?.phone);
   if (!rawName) throw new ConvexError("Enter your full name");
   if (!rawNickname) throw new ConvexError("Enter your nickname");
   if (!rawPhone) throw new ConvexError("Enter your phone number");
-  const rawFaculty = args.faculty || saved?.faculty;
+  const rawFaculty = args.faculty || known?.faculty;
   if (!rawFaculty) throw new ConvexError("Choose your faculty");
   const person = { studentId, name: text(rawName, "Name"), nickname: text(rawNickname, "Nickname", 50), phone: cleanPhone(rawPhone), faculty: rawFaculty };
   if (!saved) await ctx.db.insert("firstAidBorrowers", { ...person, updatedAt: Date.now() });
@@ -197,15 +227,18 @@ export const sportOptions = query({
   handler: async ctx => [...(await catalog(ctx)).map(s => s.thai ? `${s.thai} / ${s.name}` : s.name), "Katakorn", "Cheerleader", "Parade", "Support team"],
 });
 
-/** Lets a returning borrower skip retyping. Only a masked phone number is revealed. */
+/**
+ * Prefills forms from earlier kit logs or the participant registration, so people only type
+ * what is missing. Only a masked phone number is revealed; the server fills in the real one.
+ */
 export const knownBorrower = query({
   args: { studentId: v.string() },
   returns: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), phoneHint: v.string() }), v.null()),
   handler: async (ctx, { studentId }) => {
     const id = studentId.trim();
     if (!/^\d{10}$/.test(id)) return null;
-    const saved = await savedBorrower(ctx, id);
-    return saved ? { name: saved.name, nickname: saved.nickname, faculty: saved.faculty ?? "", phoneHint: `•••-•••-${saved.phone.slice(-4)}` } : null;
+    const known = await knownPerson(ctx, id);
+    return known ? { name: known.name, nickname: known.nickname, faculty: known.faculty, phoneHint: known.phone ? `•••-•••-${known.phone.slice(-4)}` : "" } : null;
   },
 });
 
@@ -257,7 +290,7 @@ export const checkIn = mutation({
     const current = await openLoan(ctx, kit._id);
     if (!current) throw new ConvexError(`Kit ${kit.number} is not checked out`);
     const studentId = cleanStudentId(args.studentId);
-    const saved = studentId === current.studentId ? { name: current.borrowerName } : await savedBorrower(ctx, studentId);
+    const saved = studentId === current.studentId ? { name: current.borrowerName } : await knownPerson(ctx, studentId);
     const returnerName = text(args.name?.trim() || saved?.name || "", "Name of the person returning the kit");
     const returnedAt = checkTime(args.returnedAt ?? Date.now(), "Return time");
     if (returnedAt < current.borrowedAt) throw new ConvexError("Return time must be after the borrow time");

@@ -2,14 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { BadgeCheck, ClipboardPlus } from "lucide-react";
+import { ClipboardPlus } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { FacultyCode } from "@/shared/faculties";
 import { isValidSignature, type Signature } from "@/shared/signature";
 import { SignaturePad } from "./SignaturePad";
 import { UploadError, UploadHeading } from "./self-upload/UploadLayout";
-import { FacultyChoice, FacultyTag, StudentIdField, useKnownBorrower } from "./FirstAidFields";
+import { FacultyChoice, KnownPersonCard, StudentIdField, useKnownBorrower } from "./FirstAidFields";
 import { errorMessage } from "../lib/errors";
 
 /** Digital row of the paper "รายงานการปฐมพยาบาล" sheet kept with each kit. */
@@ -28,10 +28,15 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
   const [caretakerName, setCaretakerName] = useState("");
   const [caretakerSignature, setCaretakerSignature] = useState<Signature>([]);
   const caretaker = useKnownBorrower(caretakerStudentId);
+  const patient = useKnownBorrower(patientStudentId);
+  const patientLookingUp = patientStudentId.length === 10 && patient === undefined;
+  // Ask only for what the participant registry and earlier logs don't already have.
+  const askPatientName = !patient?.name;
+  const askPatientFaculty = !patient?.faculty;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lookingUp = caretakerStudentId.length === 10 && caretaker === undefined;
-  const ready = !!patientFaculty && isValidSignature(patientSignature) && isValidSignature(caretakerSignature) && caretakerStudentId.length === 10 && !lookingUp;
+  const ready = (!askPatientFaculty || !!patientFaculty) && !patientLookingUp && isValidSignature(patientSignature) && isValidSignature(caretakerSignature) && caretakerStudentId.length === 10 && !lookingUp;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -39,7 +44,7 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
     setBusy(true); setError("");
     try {
       const result = await logTreatment({
-        kitId, sport, patientName, patientStudentId: patientStudentId || undefined, patientFaculty: patientFaculty as FacultyCode,
+        kitId, sport, patientName: askPatientName ? patientName : undefined, patientStudentId: patientStudentId || undefined, patientFaculty: askPatientFaculty && patientFaculty ? patientFaculty : undefined,
         symptoms, supplies, note: note || undefined, patientSignature,
         caretakerStudentId, caretakerName: caretakerName || undefined, caretakerSignature,
       });
@@ -53,11 +58,12 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
     <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={busy}>
       <fieldset className="upload-section" disabled={busy}>
         <legend>ผู้รับการปฐมพยาบาล / Person receiving first aid</legend>
-        <div className="form-grid">
-          <div className="field field--wide"><label htmlFor="treat-patient-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="treat-patient-name" className="input" required maxLength={100} value={patientName} onChange={e => setPatientName(e.target.value)} /></div>
-          <StudentIdField id="treat-patient-student-id" required={false} label="รหัสนักศึกษา / Student ID" value={patientStudentId} onChange={setPatientStudentId} />
-        </div>
-        <FacultyChoice id="treat-patient-faculty" value={patientFaculty} onChange={setPatientFaculty} />
+        <StudentIdField id="treat-patient-student-id" required={false} label="รหัสนักศึกษา / Student ID (กรอกก่อนเพื่อดึงข้อมูล)" value={patientStudentId} onChange={value => { setPatientStudentId(value); setPatientName(""); setPatientFaculty(""); }} />
+        {patientLookingUp && <p role="status" className="upload-help">กำลังตรวจสอบ / Checking…</p>}
+        {patient && <KnownPersonCard person={patient} />}
+        {patientStudentId.length === 10 && patient === null && <p className="upload-help">ไม่พบข้อมูลรหัสนี้ กรุณากรอกข้อมูล / No record found. Please fill in the details.</p>}
+        {askPatientName && !patientLookingUp && <div className="field"><label htmlFor="treat-patient-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="treat-patient-name" className="input" required maxLength={100} value={patientName} onChange={e => setPatientName(e.target.value)} /></div>}
+        {askPatientFaculty && !patientLookingUp && <FacultyChoice id="treat-patient-faculty" value={patientFaculty} onChange={setPatientFaculty} />}
       </fieldset>
       <fieldset className="upload-section" disabled={busy}>
         <legend>การปฐมพยาบาล / Treatment</legend>
@@ -70,8 +76,8 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
         <legend>ลงชื่อ / Signatures</legend>
         <SignaturePad id="treat-patient-signature" label="ลายมือชื่อผู้ใช้ / Signature of person receiving first aid" help="ผู้รับการปฐมพยาบาลลงชื่อยืนยันการใช้ยาและเวชภัณฑ์ / The person who received first aid signs to confirm the supplies used." disabled={busy} onChange={setPatientSignature} />
         <StudentIdField id="treat-caretaker-student-id" label="รหัสนักศึกษาผู้ดูแล / Caretaker Student ID" value={caretakerStudentId} onChange={value => { setCaretakerStudentId(value); setCaretakerName(""); }} />
-        {caretaker && <div className="upload-person"><BadgeCheck size={24} /><div><strong>ผู้ดูแล: {caretaker.name} ({caretaker.nickname}){caretaker.faculty && <> <FacultyTag code={caretaker.faculty} /></>}</strong><span>{caretakerStudentId}</span></div></div>}
-        {caretakerStudentId.length === 10 && caretaker === null && <div className="field"><label htmlFor="treat-caretaker-name">ชื่อ - สกุลผู้ดูแล / Caretaker full name <span>*</span></label><input id="treat-caretaker-name" className="input" required maxLength={100} value={caretakerName} onChange={e => setCaretakerName(e.target.value)} /></div>}
+        {caretaker && <KnownPersonCard person={caretaker} title="ผู้ดูแล" />}
+        {caretakerStudentId.length === 10 && (caretaker === null || (caretaker && !caretaker.name)) && <div className="field"><label htmlFor="treat-caretaker-name">ชื่อ - สกุลผู้ดูแล / Caretaker full name <span>*</span></label><input id="treat-caretaker-name" className="input" required maxLength={100} value={caretakerName} onChange={e => setCaretakerName(e.target.value)} /></div>}
         <SignaturePad id="treat-caretaker-signature" label="ลายมือชื่อผู้ดูแล / Caretaker signature" help="ผู้ให้การปฐมพยาบาลลงชื่อ / The person who gave first aid signs." disabled={busy} onChange={setCaretakerSignature} />
       </fieldset>
       <UploadError message={error} />

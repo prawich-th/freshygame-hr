@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { BadgeCheck } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { FACULTIES, type FacultyCode } from "@/shared/faculties";
 
@@ -29,4 +30,15 @@ export function FacultyChoice({ value, onChange, id = "kit-faculty" }: { value: 
       {FACULTIES.map(f => <label key={f.code}><input type="radio" name={id} value={f.code} required checked={value === f.code} onChange={() => onChange(f.code)} /><span><strong>{f.code}</strong><small>{f.thai}</small></span></label>)}
     </div>
   </div>;
+}
+
+type Known = { name: string; nickname: string; faculty: string; phoneHint: string };
+
+/** What the participant registry or earlier logs already know about a student ID. */
+export function KnownPersonCard({ person, title, onEdit }: { person: Known; title?: string; onEdit?: () => void }) {
+  const details = [person.phoneHint && `เบอร์โทร ${person.phoneHint}`].filter(Boolean);
+  return <div className="upload-person"><BadgeCheck size={24} /><div>
+    <strong>{title ? `${title}: ` : ""}{person.name || "ไม่มีชื่อในระบบ"}{person.nickname && ` (${person.nickname})`}{person.faculty && <> <FacultyTag code={person.faculty} /></>}</strong>
+    <span>พบข้อมูลในระบบ / Found in records{details.length ? ` · ${details.join(" · ")}` : ""}{onEdit && <> · <button type="button" className="link-button" onClick={onEdit}>แก้ไขข้อมูล / Update details</button></>}</span>
+  </div></div>;
 }

@@ -59,3 +59,12 @@ test("medical records are staff-only and only admins can delete them", async () 
   const audit = await t.run(ctx => ctx.db.query("auditEvents").collect());
   expect(JSON.stringify(audit)).not.toContain("ข้อเท้าพลิก");
 });
+
+test("a known patient's name and faculty are filled from the participant registry", async () => {
+  const { t, staff, kits } = await setup();
+  await t.run(ctx => ctx.db.insert("participants", { studentId: "6909680055", fullNameThai: "นักกีฬา ลงทะเบียน", fullNameEnglish: "Registered", faculty: "คณะแพทยศาสตร์", sport: "Football", status: "verified", source: "import", updatedAt: 1 }));
+  await t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, patientName: undefined, patientFaculty: undefined, patientStudentId: "6909680055" });
+  const [row] = (await staff.query(api.firstAidTreatments.list, { paginationOpts: { cursor: null, numItems: 1 } })).page;
+  expect(row).toMatchObject({ patientName: "นักกีฬา ลงทะเบียน", patientFaculty: "MED" });
+  await expect(t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, patientName: undefined, patientFaculty: undefined, patientStudentId: undefined })).rejects.toThrow(/faculty/);
+});

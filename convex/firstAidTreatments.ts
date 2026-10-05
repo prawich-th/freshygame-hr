@@ -3,7 +3,7 @@ import { paginationOptsValidator, paginationResultValidator } from "convex/serve
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAdmin, requireRecordsAccess } from "./access";
-import { audit, cleanNote, cleanStudentId, faculty, getKit, optionalStaff, savedBorrower, text } from "./firstAidKits";
+import { audit, cleanNote, cleanStudentId, faculty, getKit, knownPerson, optionalStaff, text } from "./firstAidKits";
 import { isValidSignature } from "../shared/signature";
 
 const signature = v.array(v.array(v.object({ x: v.number(), y: v.number() })));
@@ -36,9 +36,10 @@ export const logTreatment = mutation({
   args: {
     kitId: v.id("firstAidKits"),
     sport: v.string(),
-    patientName: v.string(),
+    // Name and faculty may be left blank when the patient's student ID is already known.
+    patientName: v.optional(v.string()),
     patientStudentId: v.optional(v.string()),
-    patientFaculty: faculty,
+    patientFaculty: v.optional(faculty),
     symptoms: v.string(),
     supplies: v.string(),
     note: v.optional(v.string()),
@@ -54,7 +55,10 @@ export const logTreatment = mutation({
     if (!kit.active) throw new ConvexError(`Kit ${kit.number} is retired`);
     const patientStudentId = args.patientStudentId?.trim() ? cleanStudentId(args.patientStudentId) : undefined;
     const caretakerStudentId = cleanStudentId(args.caretakerStudentId);
-    const caretakerName = text(args.caretakerName?.trim() || (await savedBorrower(ctx, caretakerStudentId))?.name || "", "Caretaker name");
+    const patient = patientStudentId ? await knownPerson(ctx, patientStudentId) : null;
+    const patientFaculty = args.patientFaculty || patient?.faculty;
+    if (!patientFaculty) throw new ConvexError("Choose the faculty of the person receiving first aid");
+    const caretakerName = text(args.caretakerName?.trim() || (await knownPerson(ctx, caretakerStudentId))?.name || "", "Caretaker name");
     if (!isValidSignature(args.patientSignature)) throw new ConvexError("The person receiving first aid must sign (ผู้ใช้)");
     if (!isValidSignature(args.caretakerSignature)) throw new ConvexError("The caretaker must sign (ผู้ดูแล)");
     const last = await ctx.db.query("firstAidTreatments").withIndex("by_kitId_and_sequence", q => q.eq("kitId", kit._id)).order("desc").first();
@@ -62,9 +66,9 @@ export const logTreatment = mutation({
     await ctx.db.insert("firstAidTreatments", {
       kitId: kit._id, kitNumber: kit.number, sequence, treatedAt: Date.now(),
       sport: text(args.sport, "Sport / activity"),
-      patientName: text(args.patientName, "Name of the person receiving first aid"),
+      patientName: text(args.patientName?.trim() || patient?.name || "", "Name of the person receiving first aid"),
       patientStudentId,
-      patientFaculty: args.patientFaculty,
+      patientFaculty,
       symptoms: text(args.symptoms, "Symptoms", 300),
       supplies: text(args.supplies, "Medicine / supplies used", 300),
       note: cleanNote(args.note),
