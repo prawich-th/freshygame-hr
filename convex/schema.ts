@@ -135,6 +135,28 @@ export default defineSchema({
     .index("by_kitId_and_borrowedAt", ["kitId", "borrowedAt"])
     .index("by_kitId_and_returnedAt", ["kitId", "returnedAt"]),
 
+  // Digital รายงานการปฐมพยาบาล: one row per treatment given from a kit. Staff-only to read.
+  firstAidTreatments: defineTable({
+    kitId: v.id("firstAidKits"),
+    kitNumber: v.number(),
+    sequence: v.number(),
+    treatedAt: v.number(),
+    sport: v.string(),
+    patientName: v.string(),
+    patientStudentId: v.optional(v.string()),
+    patientFaculty: v.string(),
+    symptoms: v.string(),
+    supplies: v.string(),
+    note: v.optional(v.string()),
+    patientSignature: v.array(v.array(v.object({ x: v.number(), y: v.number() }))),
+    caretakerName: v.string(),
+    caretakerStudentId: v.string(),
+    caretakerSignature: v.array(v.array(v.object({ x: v.number(), y: v.number() }))),
+    loggedBy: v.optional(v.id("users")),
+  })
+    .index("by_treatedAt", ["treatedAt"])
+    .index("by_kitId_and_sequence", ["kitId", "sequence"]),
+
   participantRemovalJobs: defineTable({
     sport: v.optional(v.string()),
     skippedCount: v.optional(v.number()),

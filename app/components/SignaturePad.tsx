@@ -4,7 +4,9 @@ import { FieldCorrection } from "./FieldCorrections";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { SIGNATURE_WIDTH, SIGNATURE_HEIGHT, isValidSignature, type Signature } from "@/shared/signature";
 
-export function SignaturePad({ onChange, disabled = false }: { onChange: (value: Signature) => void; disabled?: boolean }) {
+const PARTICIPANT_HELP = "ลงลายมือชื่อด้วยนิ้วหรือเมาส์ เพื่อยืนยันข้อมูลและรับรองสำเนาบัตรทั้งสองฉบับสำหรับการแข่งขัน TU Freshy Games 2026 / Draw your own signature to confirm your information and certify both ID copies for TU Freshy Games 2026.";
+
+export function SignaturePad({ onChange, disabled = false, id = "signature", label = "ลายมือชื่อผู้เข้าร่วม / Participant signature", help = PARTICIPANT_HELP }: { onChange: (value: Signature) => void; disabled?: boolean; id?: string; label?: string; help?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Signature>([]);
   const pointer = useRef<number | null>(null);
@@ -24,10 +26,10 @@ export function SignaturePad({ onChange, disabled = false }: { onChange: (value:
     setHasSignature(isValidSignature(strokes.current));
   }
   return <div className="field field--wide">
-    <label>ลายมือชื่อผู้เข้าร่วม / Participant signature <span>* Required</span></label>
+    <label>{label} <span>* Required</span></label>
     <FieldCorrection field="signature" />
-    <p id="signature-help">ลงลายมือชื่อด้วยนิ้วหรือเมาส์ เพื่อยืนยันข้อมูลและรับรองสำเนาบัตรทั้งสองฉบับสำหรับการแข่งขัน TU Freshy Games 2026 / Draw your own signature to confirm your information and certify both ID copies for TU Freshy Games 2026.</p>
-    <canvas ref={canvas} width={SIGNATURE_WIDTH} height={SIGNATURE_HEIGHT} aria-label="Draw your signature using touch, pen, or mouse" aria-describedby="signature-help" style={{ width: "100%", height: "auto", background: "white", border: "1px solid #b9a99c", borderRadius: 8, touchAction: "none", cursor: disabled ? "default" : "crosshair" }}
+    <p id={`${id}-help`}>{help}</p>
+    <canvas ref={canvas} width={SIGNATURE_WIDTH} height={SIGNATURE_HEIGHT} aria-label="Draw your signature using touch, pen, or mouse" aria-describedby={`${id}-help`} style={{ width: "100%", height: "auto", background: "white", border: "1px solid #b9a99c", borderRadius: 8, touchAction: "none", cursor: disabled ? "default" : "crosshair" }}
       onPointerDown={event => { if (disabled || pointer.current !== null || strokes.current.length >= 100) return; pointer.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); strokes.current.push([point(event)]); }}
       onPointerMove={event => { if (disabled || pointer.current !== event.pointerId || strokes.current.flat().length >= 5000) return; const stroke = strokes.current[strokes.current.length - 1]; const previous = stroke[stroke.length - 1]; const next = point(event); stroke.push(next); const context = canvas.current?.getContext("2d"); if (context) { context.beginPath(); context.moveTo(previous.x, previous.y); context.lineTo(next.x, next.y); context.stroke(); } }}
       onPointerUp={end} onPointerCancel={end}/>

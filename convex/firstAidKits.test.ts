@@ -85,3 +85,21 @@ test("public tracking shows today's sport sequence and only the current holder's
   // Only the current holder's phone is public; past borrowers' phones and all student IDs stay hidden.
   for (const secret of ["6909680001", "6909680002", "0812345678"]) expect(json).not.toContain(secret);
 });
+
+const participant = { studentId: "6909680055", fullNameThai: "นักกีฬา ลงทะเบียน", fullNameEnglish: "Registered Athlete", nicknameThai: "เอ", faculty: "วิทยาลัยแพทยศาสตร์นานาชาติจุฬาภรณ์", phone: "0898887777", sport: "Football", status: "verified" as const, source: "import" as const, updatedAt: 1 };
+
+test("student IDs are looked up in the participant registry first, asking only for what is missing", async () => {
+  const { t, staff, kits } = await setup();
+  await t.run(ctx => ctx.db.insert("participants", participant));
+  expect(await t.query(api.firstAidKits.knownBorrower, { studentId: participant.studentId })).toEqual({ name: "นักกีฬา ลงทะเบียน", nickname: "เอ", faculty: "CICM", phoneHint: "•••-•••-7777" });
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", studentId: participant.studentId });
+  const [row] = (await staff.query(api.firstAidKits.log, { paginationOpts: { cursor: null, numItems: 1 } })).page;
+  expect(row).toMatchObject({ borrowerName: "นักกีฬา ลงทะเบียน", nickname: "เอ", faculty: "CICM", phone: "0898887777" });
+
+  // A registration missing a nickname and phone still prefills the rest; the gaps must be supplied.
+  await t.run(ctx => ctx.db.insert("participants", { ...participant, studentId: "6909680066", nicknameThai: undefined, phone: undefined, faculty: "คณะศิลปศาสตร์" }));
+  expect(await t.query(api.firstAidKits.knownBorrower, { studentId: "6909680066" })).toEqual({ name: "นักกีฬา ลงทะเบียน", nickname: "", faculty: "L'ARTs", phoneHint: "" });
+  await expect(t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Football", studentId: "6909680066" })).rejects.toThrow(/nickname/);
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Football", studentId: "6909680066", nickname: "บี", phone: "0811112222" });
+  expect(await t.query(api.firstAidKits.knownBorrower, { studentId: "6909680066" })).toMatchObject({ nickname: "บี", phoneHint: "•••-•••-2222" });
+});
