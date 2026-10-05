@@ -12,6 +12,7 @@ import { FacultyTag, formatTime } from "./FirstAidLog";
 import { FACULTIES } from "@/shared/faculties";
 import { downloadFirstAidCsv } from "../lib/firstAidCsv";
 import { FirstAidKitLinks } from "./FirstAidKitLinks";
+import { FirstAidTreatments } from "./FirstAidTreatments";
 
 type Loan = FunctionReturnType<typeof api.firstAidKits.log>["page"][number];
 
@@ -71,6 +72,7 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
         </article>)}</div>}
     </section>
     <LogPanel kits={kits ?? []} results={results} status={status} loadMore={loadMore} kitFilter={kitFilter} setKitFilter={setKitFilter} canEdit={canEdit} onEdit={setEditing} />
+    {kits && <FirstAidTreatments kits={kits} isAdmin={role === "admin"} />}
     {kits && active.length > 0 && <FirstAidKitLinks kits={active} />}
     {role === "admin" && kits && <ManageKits kits={kits} />}
     {editing && <EditLoanDrawer loan={editing} isAdmin={role === "admin"} onClose={() => setEditing(null)} />}

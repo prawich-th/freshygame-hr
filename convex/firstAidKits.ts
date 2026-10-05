@@ -48,7 +48,7 @@ const kitOverview = v.object({
   loansToday: v.number(),
 });
 
-function text(value: string, field: string, max = 100) {
+export function text(value: string, field: string, max = 100) {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > max) throw new ConvexError(`${field} must contain 1–${max} characters`);
   return trimmed;
@@ -68,9 +68,9 @@ export function cleanPhone(value: string) {
   return phone;
 }
 
-const faculty = v.union(...FACULTIES.map(f => v.literal(f.code)));
+export const faculty = v.union(...FACULTIES.map(f => v.literal(f.code)));
 
-function cleanNote(value?: string) {
+export function cleanNote(value?: string) {
   const note = value?.trim() ?? "";
   if (note.length > 300) throw new ConvexError("Notes must be at most 300 characters");
   return note || undefined;
@@ -82,7 +82,7 @@ function checkTime(value: number, field: string) {
   return value;
 }
 
-async function savedBorrower(ctx: QueryCtx | MutationCtx, studentId: string) {
+export async function savedBorrower(ctx: QueryCtx | MutationCtx, studentId: string) {
   return ctx.db.query("firstAidBorrowers").withIndex("by_studentId", q => q.eq("studentId", studentId)).unique();
 }
 
@@ -114,7 +114,7 @@ async function openLoan(ctx: QueryCtx | MutationCtx, kitId: Id<"firstAidKits">) 
   return ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_returnedAt", q => q.eq("kitId", kitId).eq("returnedAt", undefined)).first();
 }
 
-async function getKit(ctx: QueryCtx | MutationCtx, kitId: Id<"firstAidKits">) {
+export async function getKit(ctx: QueryCtx | MutationCtx, kitId: Id<"firstAidKits">) {
   const kit = await ctx.db.get("firstAidKits", kitId);
   if (!kit) throw new ConvexError("First aid kit not found. Refresh and try again.");
   return kit;
@@ -125,14 +125,14 @@ async function latestLoan(ctx: QueryCtx | MutationCtx, kitId: Id<"firstAidKits">
 }
 
 /** Signed-in staff are recorded alongside public log entries; anyone else may log anonymously. */
-async function optionalStaff(ctx: MutationCtx) {
+export async function optionalStaff(ctx: MutationCtx) {
   const userId = await getAuthUserId(ctx);
   if (!userId) return undefined;
   const user = await ctx.db.get("users", userId);
   return user?.role && user.active !== false ? userId : undefined;
 }
 
-async function audit(ctx: MutationCtx, staffUserId: Id<"users"> | undefined, action: string) {
+export async function audit(ctx: MutationCtx, staffUserId: Id<"users"> | undefined, action: string) {
   await ctx.db.insert("auditEvents", { action, ipAddress: staffUserId ? "authenticated-staff-session" : "public-first-aid-log", staffUserId, successful: true, attempts: 1, createdAt: Date.now() });
 }
 

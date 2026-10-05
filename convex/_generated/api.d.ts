@@ -13,6 +13,7 @@ import type * as auth from "../auth.js";
 import type * as correctionValidators from "../correctionValidators.js";
 import type * as directory from "../directory.js";
 import type * as firstAidKits from "../firstAidKits.js";
+import type * as firstAidTreatments from "../firstAidTreatments.js";
 import type * as http from "../http.js";
 import type * as maintenance from "../maintenance.js";
 import type * as participantDocuments from "../participantDocuments.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   correctionValidators: typeof correctionValidators;
   directory: typeof directory;
   firstAidKits: typeof firstAidKits;
+  firstAidTreatments: typeof firstAidTreatments;
   http: typeof http;
   maintenance: typeof maintenance;
   participantDocuments: typeof participantDocuments;
