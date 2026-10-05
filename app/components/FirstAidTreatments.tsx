@@ -33,7 +33,7 @@ function reportSheet(rows: Treatment[], kitLabel: string) {
     <td>${r.sequence}</td><td>${r.kitNumber}</td><td>${treatmentDate(r.treatedAt)}</td><td>${treatmentTime(r.treatedAt)}</td><td>${escapeHtml(r.sport)}</td>
     <td>${escapeHtml(r.patientName)}</td><td>${escapeHtml(r.patientStudentId)}<br><small>${escapeHtml(r.patientFaculty)}</small></td>
     <td>${escapeHtml(r.symptoms)}</td><td>${escapeHtml(r.supplies)}${r.note ? `<br><small>หมายเหตุ: ${escapeHtml(r.note)}</small>` : ""}</td>
-    <td class="sig">${signatureSvg(r.patientSignature)}</td><td class="sig">${signatureSvg(r.caretakerSignature)}<small>${escapeHtml(r.caretakerName)}</small></td>
+    <td class="sig">${signatureSvg(r.patientSignature)}</td><td class="sig">${signatureSvg(r.caretakerSignature)}<small>${escapeHtml(r.caretakerName)}${r.caretakerFaculty ? ` · ${escapeHtml(r.caretakerFaculty)}` : ""}</small></td>
   </tr>`).join("");
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รายงานการปฐมพยาบาล</title><style>
     @page { size: A4 landscape; margin: 10mm; }
@@ -116,7 +116,7 @@ export function FirstAidTreatments({ kits, isAdmin }: { kits: Kit[]; isAdmin: bo
         <td>{row.symptoms}</td>
         <td>{row.supplies}{row.note && <><br /><span className="kit-log__muted">{row.note}</span></>}</td>
         <td><SignatureThumb signature={row.patientSignature} label={`Signature of ${row.patientName}`} /></td>
-        <td><SignatureThumb signature={row.caretakerSignature} label={`Signature of ${row.caretakerName}`} /><span className="kit-log__muted">{row.caretakerName}</span></td>
+        <td><SignatureThumb signature={row.caretakerSignature} label={`Signature of ${row.caretakerName}`} /><span className="kit-log__muted">{row.caretakerName}</span>{row.caretakerFaculty && <> <FacultyTag code={row.caretakerFaculty} /></>}</td>
         {isAdmin && <td><button className="icon-button" disabled={busy} aria-label={`Delete record ${row.sequence} of kit ${row.kitNumber}`} onClick={() => destroy(row)}><Trash2 size={14} /></button></td>}
       </tr>)}
       {status !== "LoadingFirstPage" && !results.length && <tr><td className="empty-state" colSpan={isAdmin ? 10 : 9}>No first aid has been logged yet.</td></tr>}</tbody>

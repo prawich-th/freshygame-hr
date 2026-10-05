@@ -14,6 +14,7 @@ async function setup(role: "admin" | "registrar" | "viewer" = "admin") {
   const kits = await t.query(api.firstAidKits.publicStatus, {});
   return { t, staff, kits };
 }
+const photo = (t: ReturnType<typeof convexTest>, bytes = 4) => t.run(ctx => ctx.storage.store(new Blob([new Uint8Array(bytes)], { type: "image/jpeg" })));
 const person = { studentId: "6909680001", name: "สมชาย ใจดี", nickname: "ชาย", phone: "+66 81 234 5678", faculty: "MED" as const };
 
 test("anyone can borrow and return without an account, and repeat borrowers only need a student ID", async () => {
@@ -24,13 +25,40 @@ test("anyone can borrow and return without an account, and repeat borrowers only
   expect(status[0].current).toMatchObject({ name: "สมชาย ใจดี", nickname: "ชาย", sport: "Football" });
   expect(status[0].current?.phone).toBe("0812345678");
   expect(JSON.stringify(status)).not.toContain("6909680001");
-  await t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId });
+  await t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId, photoId: await photo(t) });
 
   expect(await t.query(api.firstAidKits.knownBorrower, { studentId: person.studentId })).toEqual({ name: "สมชาย ใจดี", nickname: "ชาย", faculty: "MED", phoneHint: "•••-•••-5678" });
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Basketball", studentId: person.studentId });
   const log = await staff.query(api.firstAidKits.log, { paginationOpts: { cursor: null, numItems: 10 } });
   expect(log.page.map(r => [r.kitNumber, r.sport, r.phone, r.returnedAt === null])).toEqual([[2, "Basketball", "0812345678", true], [1, "Football", "0812345678", false]]);
   expect(log.page[1].returnerName).toBe("สมชาย ใจดี");
+  expect(log.page[1].returnPhotoUrl).toEqual(expect.any(String));
+});
+
+test("public returns need a photo of the kit; staff may skip it", async () => {
+  const { t, staff, kits } = await setup();
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
+  await expect(t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId })).rejects.toThrow(/photo/);
+  await expect(t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId, photoId: await photo(t, 6 * 1024 * 1024) })).rejects.toThrow(/under 5 MB/);
+  await expect(t.mutation(api.firstAidKits.returnPhotoUploadUrl, { kitId: kits[1].id })).rejects.toThrow(/not checked out/);
+  expect(await t.mutation(api.firstAidKits.returnPhotoUploadUrl, { kitId: kits[0].id })).toEqual(expect.any(String));
+  await staff.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId });
+  const [row] = (await staff.query(api.firstAidKits.log, { paginationOpts: { cursor: null, numItems: 1 } })).page;
+  expect([row.returnedAt !== null, row.returnPhotoUrl]).toEqual([true, null]);
+});
+
+test("deleting or reopening a return removes its photo", async () => {
+  const { t, staff, kits } = await setup();
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
+  const photoId = await photo(t);
+  await t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId, photoId });
+  const [row] = (await staff.query(api.firstAidKits.log, { paginationOpts: { cursor: null, numItems: 1 } })).page;
+  await staff.mutation(api.firstAidKits.updateLoan, { loanId: row.id, borrowerName: row.borrowerName, nickname: row.nickname, phone: row.phone, faculty: "MED", studentId: row.studentId, sport: row.sport, borrowedAt: row.borrowedAt, returnedAt: null });
+  await t.run(async ctx => { expect(await ctx.storage.get(photoId)).toBeNull(); });
+  const second = await photo(t);
+  await t.mutation(api.firstAidKits.checkIn, { kitId: kits[0].id, studentId: person.studentId, photoId: second });
+  await staff.mutation(api.firstAidKits.deleteLoan, { loanId: row.id });
+  await t.run(async ctx => { expect(await ctx.storage.get(second)).toBeNull(); });
 });
 
 test("new borrowers must give name, nickname and phone; public users cannot backdate", async () => {

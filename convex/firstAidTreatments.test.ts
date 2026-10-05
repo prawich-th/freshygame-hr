@@ -9,7 +9,7 @@ const ink = [[{ x: 10, y: 10 }, { x: 80, y: 60 }, { x: 150, y: 20 }]];
 const record = {
   sport: "Football", patientName: "ผู้ป่วย ทดสอบ", patientStudentId: "6909680009", patientFaculty: "CICM" as const,
   symptoms: "ข้อเท้าพลิก", supplies: "สเปรย์เย็น", patientSignature: ink,
-  caretakerStudentId: "6909680001", caretakerName: "ผู้ดูแล ทดสอบ", caretakerSignature: ink,
+  caretakerStudentId: "6909680001", caretakerName: "ผู้ดูแล ทดสอบ", caretakerFaculty: "L'ARTs" as const, caretakerSignature: ink,
 };
 
 async function setup(role: "admin" | "viewer" = "admin") {
@@ -41,13 +41,21 @@ test("both signatures and the patient's faculty are required", async () => {
   await expect(t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, patientFaculty: "ENG" })).rejects.toThrow();
 });
 
-test("caretaker name comes from earlier kit logs when omitted", async () => {
+test("caretaker name and faculty come from earlier kit logs when omitted", async () => {
   const { t, staff, kits } = await setup();
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", studentId: "6909680001", name: "สมชาย ใจดี", nickname: "ชาย", phone: "0812345678", faculty: "MED" });
-  await t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, caretakerName: undefined });
+  await t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, caretakerName: undefined, caretakerFaculty: undefined });
   const [row] = (await staff.query(api.firstAidTreatments.list, { paginationOpts: { cursor: null, numItems: 1 } })).page;
-  expect(row.caretakerName).toBe("สมชาย ใจดี");
+  expect([row.caretakerName, row.caretakerFaculty]).toEqual(["สมชาย ใจดี", "MED"]);
   await expect(t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, caretakerStudentId: "6909680077", caretakerName: undefined })).rejects.toThrow(/Caretaker name/);
+  await expect(t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record, caretakerStudentId: "6909680077", caretakerFaculty: undefined })).rejects.toThrow(/caretaker's faculty/);
+});
+
+test("the caretaker's faculty is logged", async () => {
+  const { t, staff, kits } = await setup();
+  await t.mutation(api.firstAidTreatments.logTreatment, { kitId: kits[0].id, ...record });
+  const [row] = (await staff.query(api.firstAidTreatments.list, { paginationOpts: { cursor: null, numItems: 1 } })).page;
+  expect(row.caretakerFaculty).toBe("L'ARTs");
 });
 
 test("medical records are staff-only and only admins can delete them", async () => {

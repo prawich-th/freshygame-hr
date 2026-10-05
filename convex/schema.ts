@@ -130,6 +130,8 @@ export default defineSchema({
     returnerName: v.optional(v.string()),
     returnerStudentId: v.optional(v.string()),
     returnedBy: v.optional(v.id("users")),
+    // Photo of the kit as it came back; required for public returns, optional when staff record one.
+    returnPhotoId: v.optional(v.id("_storage")),
   })
     .index("by_borrowedAt", ["borrowedAt"])
     .index("by_kitId_and_borrowedAt", ["kitId", "borrowedAt"])
@@ -151,6 +153,8 @@ export default defineSchema({
     patientSignature: v.array(v.array(v.object({ x: v.number(), y: v.number() }))),
     caretakerName: v.string(),
     caretakerStudentId: v.string(),
+    // Short code from shared/faculties.ts; optional only for records logged before it was collected.
+    caretakerFaculty: v.optional(v.string()),
     caretakerSignature: v.array(v.array(v.object({ x: v.number(), y: v.number() }))),
     loggedBy: v.optional(v.id("users")),
   })

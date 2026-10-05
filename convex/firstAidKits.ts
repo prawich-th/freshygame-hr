@@ -10,6 +10,8 @@ import { FACULTIES } from "../shared/faculties";
 const MAX_KITS = 100;
 // Allow small clock drift between staff devices and the server.
 const FUTURE_TOLERANCE = 5 * 60 * 1000;
+// The browser compresses return photos to ~1 MB; anything far larger was not sent by this app.
+const MAX_RETURN_PHOTO_BYTES = 5 * 1024 * 1024;
 
 const loan = v.object({
   id: v.id("firstAidKitLoans"),
@@ -28,6 +30,7 @@ const loan = v.object({
   note: v.string(),
   borrowedByName: v.union(v.string(), v.null()),
   returnedByName: v.union(v.string(), v.null()),
+  returnPhotoUrl: v.union(v.string(), v.null()),
 });
 
 // Public status omits student IDs; the current holder's phone is shown so anyone can reach the kit.
@@ -178,6 +181,7 @@ async function present(ctx: QueryCtx, row: Doc<"firstAidKitLoans">, names: Map<I
     borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null,
     returnerName: row.returnerName ?? "", returnerStudentId: row.returnerStudentId ?? "", note: row.note ?? "",
     borrowedByName: await name(row.borrowedBy), returnedByName: await name(row.returnedBy),
+    returnPhotoUrl: row.returnPhotoId ? await ctx.storage.getUrl(row.returnPhotoId) : null,
   };
 }
 
@@ -280,21 +284,42 @@ export const checkOut = mutation({
   },
 });
 
+/** Upload URL for the photo taken when a kit comes back; only offered while the kit is out. */
+export const returnPhotoUploadUrl = mutation({
+  args: { kitId: v.id("firstAidKits") },
+  returns: v.string(),
+  handler: async (ctx, { kitId }) => {
+    const kit = await getKit(ctx, kitId);
+    if (!await openLoan(ctx, kit._id)) throw new ConvexError(`Kit ${kit.number} is not checked out`);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+async function checkReturnPhoto(ctx: MutationCtx, photoId: Id<"_storage">) {
+  const file = await ctx.db.system.get("_storage", photoId);
+  if (!file) throw new ConvexError("The kit photo did not upload. Please take it again.");
+  if ((file.contentType && !file.contentType.startsWith("image/")) || file.size > MAX_RETURN_PHOTO_BYTES) throw new ConvexError("The kit photo must be an image under 5 MB. Please take it again.");
+  return photoId;
+}
+
 export const checkIn = mutation({
-  args: { kitId: v.id("firstAidKits"), studentId: v.string(), name: v.optional(v.string()), returnedAt: v.optional(v.number()) },
+  args: { kitId: v.id("firstAidKits"), studentId: v.string(), name: v.optional(v.string()), returnedAt: v.optional(v.number()), photoId: v.optional(v.id("_storage")) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const staffId = await optionalStaff(ctx);
     if (args.returnedAt !== undefined && !staffId) throw new ConvexError("Only signed-in staff can record an earlier return time");
+    // Staff can see the kit in front of them; everyone else shows its condition with a photo.
+    if (!args.photoId && !staffId) throw new ConvexError("Take a photo of the returned kit");
     const kit = await getKit(ctx, args.kitId);
     const current = await openLoan(ctx, kit._id);
     if (!current) throw new ConvexError(`Kit ${kit.number} is not checked out`);
+    const returnPhotoId = args.photoId ? await checkReturnPhoto(ctx, args.photoId) : undefined;
     const studentId = cleanStudentId(args.studentId);
     const saved = studentId === current.studentId ? { name: current.borrowerName } : await knownPerson(ctx, studentId);
     const returnerName = text(args.name?.trim() || saved?.name || "", "Name of the person returning the kit");
     const returnedAt = checkTime(args.returnedAt ?? Date.now(), "Return time");
     if (returnedAt < current.borrowedAt) throw new ConvexError("Return time must be after the borrow time");
-    await ctx.db.patch("firstAidKitLoans", current._id, { returnedAt, returnerName, returnerStudentId: studentId, returnedBy: staffId });
+    await ctx.db.patch("firstAidKitLoans", current._id, { returnedAt, returnerName, returnerStudentId: studentId, returnedBy: staffId, returnPhotoId });
     await audit(ctx, staffId, `first_aid_kit_returned:${kit.number}:${current.sport}:${studentId}`);
     return null;
   },
@@ -394,8 +419,9 @@ export const updateLoan = mutation({
       borrowerName: text(args.borrowerName, "Name"), nickname: text(args.nickname, "Nickname", 50), phone: cleanPhone(args.phone), faculty: args.faculty,
       studentId: cleanStudentId(args.studentId), sport: text(args.sport, "Sport / activity"), note: cleanNote(args.note),
       borrowedAt, returnedAt,
-      ...(returnedAt === undefined ? { returnerName: undefined, returnerStudentId: undefined, returnedBy: undefined } : {}),
+      ...(returnedAt === undefined ? { returnerName: undefined, returnerStudentId: undefined, returnedBy: undefined, returnPhotoId: undefined } : {}),
     });
+    if (returnedAt === undefined && row.returnPhotoId) await ctx.storage.delete(row.returnPhotoId);
     await audit(ctx, staff.userId, `first_aid_kit_log_corrected:${row.kitNumber}:${args.sport.trim()}`);
     return null;
   },
@@ -409,6 +435,7 @@ export const deleteLoan = mutation({
     const row = await ctx.db.get("firstAidKitLoans", loanId);
     if (!row) throw new ConvexError("Log entry not found. Refresh and try again.");
     await ctx.db.delete("firstAidKitLoans", loanId);
+    if (row.returnPhotoId) await ctx.storage.delete(row.returnPhotoId);
     await audit(ctx, staff.userId, `first_aid_kit_log_deleted:${row.kitNumber}:${row.sport}:${row.studentId}`);
     return null;
   },

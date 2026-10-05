@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
@@ -67,7 +68,7 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
             <b>{kit.current.sport}</b>
             <span>{kit.current.borrowerName} ({kit.current.nickname}){kit.current.faculty && <> <FacultyTag code={kit.current.faculty} /></>} · {kit.current.studentId}</span>
             <span><a href={`tel:${kit.current.phone}`}>{kit.current.phone}</a> · since {formatTime(kit.current.borrowedAt)}</span>
-          </span> : <span className="kit-card__where"><span>{kit.lastReturned ? `Last: ${kit.lastReturned.sport} · returned ${formatTime(kit.lastReturned.returnedAt!)}` : "Not used yet"}</span></span>}
+          </span> : <span className="kit-card__where"><span>{kit.lastReturned ? `Last: ${kit.lastReturned.sport} · returned ${formatTime(kit.lastReturned.returnedAt!)}` : "Not used yet"}</span>{kit.lastReturned?.returnPhotoUrl && <ReturnPhoto url={kit.lastReturned.returnPhotoUrl} kitNumber={kit.number} />}</span>}
           <span className="kit-card__foot"><span>{kit.loansToday} checkout{kit.loansToday === 1 ? "" : "s"} today</span>{canEdit && kit.current && <button type="button" className="button button--soft" disabled={busy} onClick={() => void markReturned(kit.id, kit.current!.studentId)}>Mark returned</button>}</span>
         </article>)}</div>}
     </section>
@@ -77,6 +78,13 @@ export function FirstAidKits({ role }: { role: "admin" | "registrar" | "viewer" 
     {role === "admin" && kits && <ManageKits kits={kits} />}
     {editing && <EditLoanDrawer loan={editing} isAdmin={role === "admin"} onClose={() => setEditing(null)} />}
   </>;
+}
+
+/** Thumbnail of the photo taken when the kit came back; opens full size in a new tab. */
+function ReturnPhoto({ url, kitNumber, large }: { url: string; kitNumber: number; large?: boolean }) {
+  return <a className={`kit-return-photo${large ? " kit-return-photo--large" : ""}`} href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>
+    <img src={url} alt={`Kit ${kitNumber} when it was returned`} loading="lazy" />
+  </a>;
 }
 
 function Stat({ label, value, icon: Icon }: { label: string; value?: number; icon: typeof BriefcaseMedical }) {
@@ -114,7 +122,7 @@ function LogPanel({ kits, results, status, loadMore, kitFilter, setKitFilter, ca
       <thead><tr><th>วันที่ยืม · Borrowed</th><th>วันที่คืน · Returned</th><th>ชื่อ - สกุล · Name</th><th>คณะ · Faculty</th><th>รหัสนักศึกษา · Student ID</th><th>เบอร์โทร · Phone</th><th>สำหรับกีฬา · Sport</th><th>กล่องที่ · Kit</th>{canEdit && <th aria-label="Actions" />}</tr></thead>
       <tbody>{results.map(row => <tr key={row.id} onClick={canEdit ? () => onEdit(row) : undefined} style={canEdit ? undefined : { cursor: "default" }}>
         <td>{formatTime(row.borrowedAt)}</td>
-        <td>{row.returnedAt === null ? <span className="pill pill--red">OUT</span> : <>{formatTime(row.returnedAt)}{row.returnerStudentId && row.returnerStudentId !== row.studentId && <><br /><span className="kit-log__muted">by {row.returnerName}</span></>}</>}</td>
+        <td>{row.returnedAt === null ? <span className="pill pill--red">OUT</span> : <>{formatTime(row.returnedAt)}{row.returnerStudentId && row.returnerStudentId !== row.studentId && <><br /><span className="kit-log__muted">by {row.returnerName}</span></>}{row.returnPhotoUrl && <ReturnPhoto url={row.returnPhotoUrl} kitNumber={row.kitNumber} />}</>}</td>
         <td><strong>{row.borrowerName}</strong><br /><span className="kit-log__muted">{row.nickname}</span></td>
         <td>{row.faculty ? <FacultyTag code={row.faculty} /> : "—"}</td>
         <td>{row.studentId}</td>
@@ -215,6 +223,7 @@ function EditLoanDrawer({ loan, isAdmin, onClose }: { loan: Loan; isAdmin: boole
         <label className="participant-edit__incomplete field--wide"><input type="checkbox" checked={returned} onChange={e => setReturned(e.target.checked)} /><span>Kit has been returned</span></label>
         <div className="field field--wide"><label htmlFor="loan-note">Note</label><input id="loan-note" className="input" name="note" maxLength={300} defaultValue={loan.note} /></div>
       </div>
+      {loan.returnPhotoUrl && <ReturnPhoto url={loan.returnPhotoUrl} kitNumber={loan.kitNumber} large />}
       {loan.returnerName && <p className="kit-log__muted">Returned by {loan.returnerName} ({loan.returnerStudentId}){loan.returnedByName ? ` · logged by ${loan.returnedByName}` : ""}</p>}
       {error && <div role="alert" className="notice notice--error">{error}</div>}
       <div className="participant-edit__actions">
