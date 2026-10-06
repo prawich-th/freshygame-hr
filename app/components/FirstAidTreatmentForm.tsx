@@ -9,7 +9,7 @@ import type { FacultyCode } from "@/shared/faculties";
 import { isValidSignature, type Signature } from "@/shared/signature";
 import { SignaturePad } from "./SignaturePad";
 import { UploadError, UploadHeading } from "./self-upload/UploadLayout";
-import { FacultyChoice, KnownPersonCard, StillNeeded, StudentIdField, useKnownBorrower } from "./FirstAidFields";
+import { FacultyChoice, KnownPersonCard, StudentIdField, useKnownBorrower } from "./FirstAidFields";
 import { errorMessage } from "../lib/errors";
 
 /** Digital row of the paper "รายงานการปฐมพยาบาล" sheet kept with each kit. */
@@ -71,7 +71,7 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
 
   return <>
     <UploadHeading title="บันทึกการปฐมพยาบาล">บันทึกทุกครั้งที่ใช้ยาหรือเวชภัณฑ์จากกล่องนี้ วันที่และเวลาจะบันทึกอัตโนมัติ<br />Record every time medicine or supplies from this kit are used. The date and time are saved automatically.</UploadHeading>
-    <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={busy}>
+    <form className="upload-form kit-form" onSubmit={e => void submit(e)} aria-busy={busy}>
       <fieldset className="upload-section" disabled={busy}>
         <legend>1 · ผู้รับการปฐมพยาบาล / Person receiving first aid</legend>
         <StudentIdField id="treat-patient-student-id" required={false} label="รหัสนักศึกษา / Student ID (กรอกก่อนเพื่อดึงข้อมูล)" value={patientStudentId} onChange={value => { setPatientStudentId(value); setPatientName(""); setPatientFaculty(""); }} />
@@ -102,7 +102,6 @@ export function TreatmentForm({ kitId, defaultSport, onBack, onDone }: { kitId: 
         <SignaturePad id="treat-caretaker-signature" label="ลายมือชื่อผู้ดูแล / Caretaker signature" help="ผู้ให้การปฐมพยาบาลลงชื่อ / The person who gave first aid signs." disabled={busy} onChange={setCaretakerSignature} />
       </fieldset>
       <UploadError message={error} />
-      <StillNeeded items={missing} />
       <div className="upload-actions">
         <button type="button" className="button button--ghost" disabled={busy} onClick={onBack}>ย้อนกลับ / Back</button>
         <button className="button button--primary" disabled={busy || !ready}>{busy ? "กำลังบันทึก / Saving…" : <><ClipboardPlus size={17} /> บันทึก / Save record</>}</button>

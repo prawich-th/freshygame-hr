@@ -11,7 +11,7 @@ import { UploadError, UploadHeading } from "./self-upload/UploadLayout";
 import { UserFacingError, errorMessage } from "../lib/errors";
 import { FirstAidContact } from "./FirstAidContact";
 import { type FacultyCode } from "@/shared/faculties";
-import { FacultyChoice, FacultyTag, KitPhotoField, KnownPersonCard, StillNeeded, StudentIdField, formatTime, isFaculty, useKnownBorrower } from "./FirstAidFields";
+import { FacultyChoice, FacultyTag, KitPhotoField, KnownPersonCard, StudentIdField, formatTime, isFaculty, useKnownBorrower } from "./FirstAidFields";
 import { compressImage } from "../lib/compressImage";
 import { TreatmentForm } from "./FirstAidTreatmentForm";
 
@@ -140,7 +140,7 @@ function BorrowForm({ kitId, handover, onBack, onDone }: { kitId: Id<"firstAidKi
 
   return <>
     <UploadHeading title={handover ? "รับกล่องต่อ" : "ยืมกล่อง"}>{handover ? "บันทึกการคืนของผู้ยืมเดิมและการยืมของคุณในครั้งเดียว" : "กรอกรหัสนักศึกษา ระบบจะดึงข้อมูลจากทะเบียนผู้เข้าร่วมหรือการยืมครั้งก่อนให้ และถามเฉพาะส่วนที่ยังขาด"}<br />{handover ? "Records the previous borrower's return and your checkout together." : "Enter your Student ID. Details from the participant registry or earlier logs are filled in; you are only asked for what is missing."}</UploadHeading>
-    <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={busy}>
+    <form className="upload-form kit-form" onSubmit={e => void submit(e)} aria-busy={busy}>
       <fieldset className="upload-section" disabled={busy}>
         <legend>ผู้ยืม / Borrower</legend>
         <StudentIdField id="kit-student-id" value={studentId} onChange={changeStudentId} />
@@ -198,7 +198,7 @@ function ReturnForm({ kitId, onBack, onDone }: { kitId: Id<"firstAidKits">; onBa
 
   return <>
     <UploadHeading title="คืนกล่อง">2 ขั้นตอน: กรอกรหัสนักศึกษา แล้วถ่ายรูปกล่องที่คืน<br />Two steps: enter your Student ID, then take a photo of the kit you are returning.</UploadHeading>
-    <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={!!busy}>
+    <form className="upload-form kit-form" onSubmit={e => void submit(e)} aria-busy={!!busy}>
       <fieldset className="upload-section" disabled={!!busy}>
         <legend>1 · ผู้คืน / Returned by</legend>
         <StudentIdField id="kit-return-student-id" value={studentId} onChange={setStudentId} />
@@ -211,7 +211,6 @@ function ReturnForm({ kitId, onBack, onDone }: { kitId: Id<"firstAidKits">; onBa
         <KitPhotoField id="kit-return-photo" file={photo} onChange={file => { setPhoto(file); setError(""); }} disabled={!!busy} />
       </fieldset>
       <UploadError message={error} />
-      <StillNeeded items={[studentId.length !== 10 && "รหัสนักศึกษา / Student ID", askName && !name.trim() && "ชื่อ / Name", !photo && "รูปกล่อง / Kit photo"]} />
       <div className="upload-actions">
         <button type="button" className="button button--ghost" disabled={!!busy} onClick={onBack}>ย้อนกลับ / Back</button>
         <button className="button button--primary" disabled={!!busy || studentId.length !== 10 || lookingUp || !photo}>{busy === "upload" ? "กำลังอัปโหลดรูป / Uploading photo…" : busy === "save" ? "กำลังบันทึก / Saving…" : <><PackageCheck size={17} /> คืนกล่อง / Return</>}</button>
