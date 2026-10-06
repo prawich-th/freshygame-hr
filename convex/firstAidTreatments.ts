@@ -24,6 +24,7 @@ const treatment = v.object({
   patientSignature: signature,
   caretakerName: v.string(),
   caretakerStudentId: v.string(),
+  caretakerFaculty: v.string(),
   caretakerSignature: signature,
   loggedByName: v.union(v.string(), v.null()),
 });
@@ -46,6 +47,8 @@ export const logTreatment = mutation({
     patientSignature: signature,
     caretakerStudentId: v.string(),
     caretakerName: v.optional(v.string()),
+    // May be left blank when the caretaker's student ID is already known.
+    caretakerFaculty: v.optional(faculty),
     caretakerSignature: signature,
   },
   returns: v.object({ kitNumber: v.number(), sequence: v.number() }),
@@ -58,7 +61,10 @@ export const logTreatment = mutation({
     const patient = patientStudentId ? await knownPerson(ctx, patientStudentId) : null;
     const patientFaculty = args.patientFaculty || patient?.faculty;
     if (!patientFaculty) throw new ConvexError("Choose the faculty of the person receiving first aid");
-    const caretakerName = text(args.caretakerName?.trim() || (await knownPerson(ctx, caretakerStudentId))?.name || "", "Caretaker name");
+    const caretaker = await knownPerson(ctx, caretakerStudentId);
+    const caretakerName = text(args.caretakerName?.trim() || caretaker?.name || "", "Caretaker name");
+    const caretakerFaculty = args.caretakerFaculty || caretaker?.faculty;
+    if (!caretakerFaculty) throw new ConvexError("Choose the caretaker's faculty");
     if (!isValidSignature(args.patientSignature)) throw new ConvexError("The person receiving first aid must sign (ผู้ใช้)");
     if (!isValidSignature(args.caretakerSignature)) throw new ConvexError("The caretaker must sign (ผู้ดูแล)");
     const last = await ctx.db.query("firstAidTreatments").withIndex("by_kitId_and_sequence", q => q.eq("kitId", kit._id)).order("desc").first();
@@ -73,7 +79,7 @@ export const logTreatment = mutation({
       supplies: text(args.supplies, "Medicine / supplies used", 300),
       note: cleanNote(args.note),
       patientSignature: args.patientSignature,
-      caretakerName, caretakerStudentId,
+      caretakerName, caretakerStudentId, caretakerFaculty,
       caretakerSignature: args.caretakerSignature,
       loggedBy: staffId,
     });
@@ -99,7 +105,7 @@ export const list = query({
         return {
           id: row._id, kitId: row.kitId, kitNumber: row.kitNumber, sequence: row.sequence, treatedAt: row.treatedAt, sport: row.sport,
           patientName: row.patientName, patientStudentId: row.patientStudentId ?? "", patientFaculty: row.patientFaculty, symptoms: row.symptoms, supplies: row.supplies, note: row.note ?? "",
-          patientSignature: row.patientSignature, caretakerName: row.caretakerName, caretakerStudentId: row.caretakerStudentId,
+          patientSignature: row.patientSignature, caretakerName: row.caretakerName, caretakerStudentId: row.caretakerStudentId, caretakerFaculty: row.caretakerFaculty ?? "",
           caretakerSignature: row.caretakerSignature, loggedByName: row.loggedBy ? names.get(row.loggedBy) ?? null : null,
         };
       })),

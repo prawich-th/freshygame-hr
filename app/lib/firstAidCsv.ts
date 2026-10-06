@@ -52,6 +52,7 @@ export type FirstAidTreatmentRow = {
   note: string;
   caretakerName: string;
   caretakerStudentId: string;
+  caretakerFaculty: string;
 };
 
 export const treatmentDate = (value: number) => new Date(value).toLocaleDateString("th-TH", { dateStyle: "medium" });
@@ -60,8 +61,8 @@ export const treatmentTime = (value: number) => new Date(value).toLocaleTimeStri
 export function treatmentCsv(rows: FirstAidTreatmentRow[]) {
   const sorted = [...rows].sort((a, b) => a.kitNumber - b.kitNumber || a.sequence - b.sequence);
   return "\uFEFF" + [
-    ["กล่องที่", "ลำดับ", "วันที่", "เวลา", "กีฬา", "ชื่อ - สกุล", "รหัสนักศึกษา", "คณะ", "อาการ", "ยา / เวชภัณฑ์ ที่ใช้", "หมายเหตุ", "ผู้ดูแล", "รหัสนักศึกษาผู้ดูแล", "ลงชื่อ"],
-    ...sorted.map(r => [String(r.kitNumber), String(r.sequence), treatmentDate(r.treatedAt), treatmentTime(r.treatedAt), r.sport, r.patientName, r.patientStudentId, r.patientFaculty, r.symptoms, r.supplies, r.note, r.caretakerName, r.caretakerStudentId, "ลงชื่อแล้วทั้งสองฝ่าย"]),
+    ["กล่องที่", "ลำดับ", "วันที่", "เวลา", "กีฬา", "ชื่อ - สกุล", "รหัสนักศึกษา", "คณะ", "อาการ", "ยา / เวชภัณฑ์ ที่ใช้", "หมายเหตุ", "ผู้ดูแล", "รหัสนักศึกษาผู้ดูแล", "คณะผู้ดูแล", "ลงชื่อ"],
+    ...sorted.map(r => [String(r.kitNumber), String(r.sequence), treatmentDate(r.treatedAt), treatmentTime(r.treatedAt), r.sport, r.patientName, r.patientStudentId, r.patientFaculty, r.symptoms, r.supplies, r.note, r.caretakerName, r.caretakerStudentId, r.caretakerFaculty, "ลงชื่อแล้วทั้งสองฝ่าย"]),
   ].map(row => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 

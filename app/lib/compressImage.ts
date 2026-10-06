@@ -5,6 +5,8 @@ const INITIAL_JPEG_QUALITY = 0.72;
 const MIN_JPEG_QUALITY = 0.48;
 const TARGET_BYTES = 900 * 1024;
 export type UploadImageKind = "profile" | "nationalId" | "studentId";
+/** Photo of a first aid kit as it is returned. */
+export type KitPhotoKind = "kitReturn";
 
 
 // Use the same browser image decoder as the upload preview. It applies EXIF
@@ -25,8 +27,8 @@ async function decodeImage(file: File) {
   }
 }
 
-export async function compressImage(file: File, kind: UploadImageKind) {
-  if (!["profile", "nationalId", "studentId"].includes(kind)) throw new UserFacingError("Unknown document type");
+export async function compressImage(file: File, kind: UploadImageKind | KitPhotoKind) {
+  if (!["profile", "nationalId", "studentId", "kitReturn"].includes(kind)) throw new UserFacingError("Unknown document type");
   if (!file.type.startsWith("image/")) {
     throw new UserFacingError("Please choose a JPG, PNG, or WebP image");
   }

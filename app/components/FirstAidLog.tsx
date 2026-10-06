@@ -8,10 +8,11 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Brand } from "./Brand";
 import { UploadError, UploadHeading } from "./self-upload/UploadLayout";
-import { errorMessage } from "../lib/errors";
+import { UserFacingError, errorMessage } from "../lib/errors";
 import { FirstAidContact } from "./FirstAidContact";
 import { type FacultyCode } from "@/shared/faculties";
-import { FacultyChoice, FacultyTag, KnownPersonCard, StudentIdField, formatTime, isFaculty, useKnownBorrower } from "./FirstAidFields";
+import { FacultyChoice, FacultyTag, KitPhotoField, KnownPersonCard, StillNeeded, StudentIdField, formatTime, isFaculty, useKnownBorrower } from "./FirstAidFields";
+import { compressImage } from "../lib/compressImage";
 import { TreatmentForm } from "./FirstAidTreatmentForm";
 
 export { FacultyTag, formatTime } from "./FirstAidFields";
@@ -50,7 +51,7 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
           <ol className="upload-steps">
             <li><b>01</b><div><strong>เลือกกล่อง</strong><span>Choose a kit</span></div></li>
             <li><b>02</b><div><strong>ยืม คืน รับต่อ หรือบันทึกการปฐมพยาบาล</strong><span>Borrow, return, take over, or log first aid</span></div></li>
-            <li><b>03</b><div><strong>บันทึกเรียบร้อย</strong><span>Logged</span></div></li>
+            <li><b>03</b><div><strong>ตอนคืน ถ่ายรูปกล่อง</strong><span>When returning, take a photo of the kit</span></div></li>
           </ol>
           <div className="upload-sidebar__note"><BriefcaseMedical size={21} /><p>หากกล่องถูกส่งต่อให้กีฬาถัดไปโดยตรง ให้ผู้รับเลือก “รับต่อ” เพื่อบันทึกการคืนและการยืมพร้อมกัน<br /><Link className="link-button" href="/first-aid/track"><MapPin size={13} /> ดูว่ากล่องอยู่ที่ไหน / Track kits</Link></p></div>
         </aside>
@@ -70,7 +71,7 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
               <UploadHeading title="ต้องการทำอะไร?">{kit.current ? "เลือก “คืนกล่อง” เมื่อนำกล่องกลับมาคืน “รับต่อ” เมื่อรับกล่องต่อจากกีฬาก่อนหน้าโดยตรง หรือ “บันทึกการปฐมพยาบาล” เมื่อใช้ยาหรือเวชภัณฑ์" : "ยืมกล่องไปใช้ หรือบันทึกการปฐมพยาบาลเมื่อใช้ยาหรือเวชภัณฑ์จากกล่องนี้"}</UploadHeading>
               <div className="kit-actions">
                 {kit.current ? <>
-                  <button type="button" className="kit-action" onClick={() => setMode("return")}><Undo2 size={22} /><strong>คืนกล่อง</strong><span>Return this kit</span></button>
+                  <button type="button" className="kit-action" onClick={() => setMode("return")}><Undo2 size={22} /><strong>คืนกล่อง</strong><span>Return this kit · ถ่ายรูปกล่อง / photo needed</span></button>
                   <button type="button" className="kit-action" onClick={() => setMode("handover")}><ArrowRightLeft size={22} /><strong>รับต่อ</strong><span>Take over for another sport</span></button>
                 </> : <button type="button" className="kit-action" onClick={() => setMode("borrow")}><PackageOpen size={22} /><strong>ยืมกล่อง</strong><span>Borrow this kit</span></button>}
                 <button type="button" className="kit-action" onClick={() => setMode("treatment")}><ClipboardPlus size={22} /><strong>บันทึกการปฐมพยาบาล</strong><span>Log first aid given</span></button>
@@ -169,33 +170,51 @@ function BorrowForm({ kitId, handover, onBack, onDone }: { kitId: Id<"firstAidKi
 
 function ReturnForm({ kitId, onBack, onDone }: { kitId: Id<"firstAidKits">; onBack: () => void; onDone: () => void }) {
   const checkIn = useMutation(api.firstAidKits.checkIn);
+  const uploadUrl = useMutation(api.firstAidKits.returnPhotoUploadUrl);
   const [studentId, setStudentId] = useState("");
   const known = useKnownBorrower(studentId);
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [busy, setBusy] = useState<"" | "upload" | "save">(""); const [error, setError] = useState("");
   const lookingUp = /^\d{10}$/.test(studentId) && known === undefined;
+  const askName = studentId.length === 10 && (known === null || (!!known && !known.name));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true); setError("");
-    try { await checkIn({ kitId, studentId, name: name || undefined }); onDone(); }
+    if (!photo) { setError("กรุณาถ่ายรูปกล่อง / Please take a photo of the kit."); return; }
+    setBusy("upload"); setError("");
+    try {
+      const compressed = await compressImage(photo, "kitReturn");
+      const response = await fetch(await uploadUrl({ kitId }), { method: "POST", headers: { "Content-Type": compressed.type }, body: compressed });
+      if (!response.ok) throw new UserFacingError("อัปโหลดรูปไม่สำเร็จ ลองอีกครั้ง / The photo did not upload. Please try again.");
+      const { storageId } = await response.json() as { storageId: Id<"_storage"> };
+      setBusy("save");
+      await checkIn({ kitId, studentId, name: name || undefined, photoId: storageId });
+      onDone();
+    }
     catch (caught) { setError(errorMessage(caught, "Return this kit")); }
-    finally { setBusy(false); }
+    finally { setBusy(""); }
   }
 
   return <>
-    <UploadHeading title="คืนกล่อง">กรอกรหัสนักศึกษาของผู้ที่นำกล่องมาคืน<br />Enter the Student ID of the person returning the kit.</UploadHeading>
-    <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={busy}>
-      <fieldset className="upload-section" disabled={busy}>
-        <legend>ผู้คืน / Returned by</legend>
+    <UploadHeading title="คืนกล่อง">2 ขั้นตอน: กรอกรหัสนักศึกษา แล้วถ่ายรูปกล่องที่คืน<br />Two steps: enter your Student ID, then take a photo of the kit you are returning.</UploadHeading>
+    <form className="upload-form" onSubmit={e => void submit(e)} aria-busy={!!busy}>
+      <fieldset className="upload-section" disabled={!!busy}>
+        <legend>1 · ผู้คืน / Returned by</legend>
         <StudentIdField id="kit-return-student-id" value={studentId} onChange={setStudentId} />
+        {lookingUp && <p role="status" className="upload-help">กำลังตรวจสอบ / Checking…</p>}
         {known && <KnownPersonCard person={known} />}
-        {studentId.length === 10 && (known === null || (known && !known.name)) && <div className="field"><label htmlFor="kit-return-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="kit-return-name" className="input" required maxLength={100} value={name} onChange={e => setName(e.target.value)} /></div>}
+        {askName && <div className="field"><label htmlFor="kit-return-name">ชื่อ - สกุล / Full name <span>*</span></label><input id="kit-return-name" className="input" required maxLength={100} value={name} onChange={e => setName(e.target.value)} /></div>}
+      </fieldset>
+      <fieldset className="upload-section" disabled={!!busy}>
+        <legend>2 · รูปกล่องที่คืน / Photo of the returned kit</legend>
+        <KitPhotoField id="kit-return-photo" file={photo} onChange={file => { setPhoto(file); setError(""); }} disabled={!!busy} />
       </fieldset>
       <UploadError message={error} />
+      <StillNeeded items={[studentId.length !== 10 && "รหัสนักศึกษา / Student ID", askName && !name.trim() && "ชื่อ / Name", !photo && "รูปกล่อง / Kit photo"]} />
       <div className="upload-actions">
-        <button type="button" className="button button--ghost" disabled={busy} onClick={onBack}>ย้อนกลับ / Back</button>
-        <button className="button button--primary" disabled={busy || studentId.length !== 10 || lookingUp}>{busy ? "กำลังบันทึก / Saving…" : <><PackageCheck size={17} /> คืนกล่อง / Return</>}</button>
+        <button type="button" className="button button--ghost" disabled={!!busy} onClick={onBack}>ย้อนกลับ / Back</button>
+        <button className="button button--primary" disabled={!!busy || studentId.length !== 10 || lookingUp || !photo}>{busy === "upload" ? "กำลังอัปโหลดรูป / Uploading photo…" : busy === "save" ? "กำลังบันทึก / Saving…" : <><PackageCheck size={17} /> คืนกล่อง / Return</>}</button>
       </div>
     </form>
   </>;
