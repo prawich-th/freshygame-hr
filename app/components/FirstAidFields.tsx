@@ -45,12 +45,6 @@ export function KnownPersonCard({ person, title, onEdit }: { person: Known; titl
   </div></div>;
 }
 
-/** Tells people why the save button is still disabled instead of leaving them guessing. */
-export function StillNeeded({ items }: { items: (string | false)[] }) {
-  const missing = items.filter(Boolean);
-  return missing.length ? <p className="upload-help kit-still-needed" role="status">ยังขาด / Still needed: {missing.join(" · ")}</p> : null;
-}
-
 /** One-tap camera capture with a preview; falls back to the photo picker on desktops. */
 export function KitPhotoField({ id, file, onChange, disabled }: { id: string; file: File | null; onChange: (file: File | null) => void; disabled?: boolean }) {
   const [preview, setPreview] = useState("");

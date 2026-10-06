@@ -61,6 +61,7 @@ h1, h2, h3, .font-display { font-family: var(--font-inter), var(--font-noto-thai
 .prep-card li small { color: $muted; font-size: 11px; }
 .prep-card__note { margin-top: auto; padding: 11px 12px; border-radius: 10px; background: #f3eee8; color: $brown; display: flex; align-items: center; gap: 9px; font-size: 11px; line-height: 1.45; }
 .prep-card__note svg { flex: 0 0 auto; }
+.prep-card .kit-contact { margin-top: auto; }
 .staff-access { margin-top: 16px; min-height: 78px; padding: 15px 18px; border: 1px solid $line; border-radius: 15px; background: #f6f2ed; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .staff-access > div { display: flex; align-items: center; gap: 12px; }
 .staff-access__icon { width: 40px; height: 40px; border-radius: 11px; background: white; color: $brown; display: grid; place-items: center; }
@@ -768,7 +769,11 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-action:focus-visible { outline: 2px solid $brown; outline-offset: 2px; }
 .link-button { border: 0; background: none; padding: 0; color: $brown; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .kit-log__muted { color: #99908b; font-size: 9px; }
-.kit-still-needed { margin-top: 14px; font-size: 13px; }
+/* First aid forms: each step is its own card with a clear header so sections can't run together. */
+.kit-form { gap: 18px; }
+.kit-form .upload-section { border: 1px solid $line; border-left: 4px solid $brown; border-radius: 14px; background: white; padding: 0 20px 20px; overflow: hidden; box-shadow: 0 6px 18px rgba(75,47,37,.05); }
+.kit-form .upload-section legend { float: left; width: calc(100% + 40px); margin: 0 -20px 2px; padding: 13px 20px; border-bottom: 1px solid $line; background: #f6f2ed; color: $brown; font-size: 15px; font-weight: 800; }
+@media (max-width: 460px) { .kit-form .upload-section { padding: 0 14px 16px; } .kit-form .upload-section legend { width: calc(100% + 28px); margin: 0 -14px 2px; padding: 12px 14px; } }
 .kit-photo__preview { width: 140px; height: 112px; }
 .kit-photo__preview img { object-fit: cover; }
 @media (max-width: 460px) { .kit-photo__preview { width: 100%; height: 200px; } }

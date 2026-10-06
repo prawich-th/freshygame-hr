@@ -27,7 +27,7 @@ const thSarabunNew = localFont({
 
 export const metadata: Metadata = {
   title: "Freshy Game HR · Brown Team",
-  description: "Participant records and accreditation for Freshy Game 2026",
+  description: "First aid kits, participant records and accreditation for Freshy Game 2026",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
