@@ -195,7 +195,7 @@ export function PerformerRegistration() {
         <form onSubmit={handleLookup} className="upload-form" aria-busy={busy}>
           <fieldset className="upload-section" disabled={busy}>
             <legend>ข้อมูลลงทะเบียน / Registration details</legend>
-            <div className="field"><label htmlFor="performer-student-id">รหัสนักศึกษา / Student ID *</label><input id="performer-student-id" className="input" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} value={studentId} readOnly={recordExists} onChange={event => setStudentId(event.target.value)} placeholder="6909680123" /><small>รหัสนักศึกษา 10 หลัก / 10-digit Student ID</small></div>
+            <div className="field"><label htmlFor="performer-student-id">รหัสนักศึกษา / Student ID *</label><input id="performer-student-id" className="input" required inputMode="numeric" pattern="[0-9]{10}" minLength={10} maxLength={10} value={studentId} readOnly={recordExists} onChange={event => setStudentId(event.target.value)} placeholder="กรอกรหัสนักศึกษา 10 หลัก" /><small>รหัสนักศึกษา 10 หลัก ไม่จำเป็นต้องขึ้นต้นด้วย 69 / 10-digit Student ID; any prefix accepted</small></div>
             {recordExists && <>
               <div className="notice notice--success">พบข้อมูลแล้ว กรุณายืนยันเบอร์โทรเพื่อใช้ข้อมูลเดิม<br />Record found. Verify your registered phone to reuse your details.</div>
               <Field name="phone" label="เบอร์โทรที่ลงทะเบียน / Registered phone" required type="tel" autoComplete="tel" />

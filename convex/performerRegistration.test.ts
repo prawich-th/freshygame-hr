@@ -35,6 +35,19 @@ test("Student ID lookup reveals only existence and validates its session", async
   await expect(t.mutation(api.publicIntake.checkPerformerStudentId, { auditEventId, studentId: profile.studentId })).rejects.toThrow("Too many attempts");
 });
 
+test("photographers and followers can register with a student ID that does not start with 69", async () => {
+  const { t, auditEventId } = await setup();
+  const studentId = "6809680001";
+  expect(await t.mutation(api.publicIntake.checkPerformerStudentId, { auditEventId, studentId })).toEqual({ exists: false });
+  const result = await t.mutation(api.publicIntake.registerPerformer, {
+    ...profile, studentId, auditEventId, performerType: "Parade",
+    category: "ช่างภาพและผู้ติดตาม", pdpaConsent: true,
+  });
+  const session = await t.run(ctx => ctx.db.get("uploadSessions", result.sessionId));
+  const participant = await t.run(ctx => ctx.db.get("participants", session!.participantId));
+  expect(participant).toMatchObject({ studentId, performerType: "Parade", category: "ช่างภาพและผู้ติดตาม" });
+});
+
 test("verified returning athlete adds a performer registration and reuses documents", async () => {
   const { t, auditEventId, participantId } = await setup();
   await expect(t.mutation(api.publicIntake.verifyIdentity, { auditEventId, studentId: profile.studentId, phone: "0899999999" })).rejects.toThrow("does not match");
