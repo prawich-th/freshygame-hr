@@ -131,3 +131,28 @@ test("student IDs are looked up in the participant registry first, asking only f
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Football", studentId: "6909680066", nickname: "บี", phone: "0811112222" });
   expect(await t.query(api.firstAidKits.knownBorrower, { studentId: "6909680066" })).toMatchObject({ nickname: "บี", phoneHint: "•••-•••-2222" });
 });
+
+test("agents with the API token can read every kit's status as JSON over HTTP", async () => {
+  const { t, kits } = await setup();
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Football", ...person });
+  const previous = process.env.FIRST_AID_API_TOKEN;
+  try {
+    delete process.env.FIRST_AID_API_TOKEN;
+    expect((await t.fetch("/first-aid/kits", { method: "GET" })).status).toBe(503);
+    process.env.FIRST_AID_API_TOKEN = "test-token";
+    expect((await t.fetch("/first-aid/kits", { method: "GET" })).status).toBe(401);
+    expect((await t.fetch("/first-aid/kits", { method: "GET", headers: { Authorization: "Bearer wrong-token" } })).status).toBe(401);
+    const res = await t.fetch("/first-aid/kits", { method: "GET", headers: { Authorization: "Bearer test-token" } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ total: 2, available: 1, checkedOut: 1 });
+    expect(body.kits).toEqual([
+      { number: 1, label: "", status: "available", holder: null },
+      { number: 2, label: "", status: "checked_out", holder: expect.objectContaining({ nickname: "ชาย", sport: "Football", borrowedAt: expect.any(String) }) },
+    ]);
+    expect(JSON.stringify(body)).not.toContain(person.studentId);
+  } finally {
+    if (previous === undefined) delete process.env.FIRST_AID_API_TOKEN;
+    else process.env.FIRST_AID_API_TOKEN = previous;
+  }
+});
