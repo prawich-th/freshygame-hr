@@ -823,3 +823,7 @@ button.kit-card:focus-visible { outline: 2px solid $brown; outline-offset: 2px; 
 .kit-treatments td:nth-child(6), .kit-treatments td:nth-child(7) { min-width: 140px; }
 // The kit tables scroll sideways, so keep every column that the participant table hides on small screens.
 @media (max-width: 900px) { .data-table.kit-log :is(th, td) { display: table-cell; } }
+.kit-card--missing { background: #fdf6f5; border-color: #ecc9c3; }
+.kit-card__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 14px 16px; border-top: 1px solid $line; color: $muted; font-size: 12px; }
+.pager .button { min-height: 34px; }

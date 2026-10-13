@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useConvex, useMutation, usePaginatedQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Download, Printer, Trash2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -9,6 +9,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { SIGNATURE_HEIGHT, SIGNATURE_WIDTH, type Signature } from "@/shared/signature";
 import { FacultyTag } from "./FirstAidFields";
 import { errorMessage } from "../lib/errors";
+import { Pager, useCursorPages } from "./Pager";
 import { downloadTreatmentCsv, treatmentDate, treatmentTime } from "../lib/firstAidCsv";
 
 type Treatment = FunctionReturnType<typeof api.firstAidTreatments.list>["page"][number];
@@ -61,7 +62,9 @@ export function FirstAidTreatments({ kits, isAdmin }: { kits: Kit[]; isAdmin: bo
   const convex = useConvex();
   const remove = useMutation(api.firstAidTreatments.remove);
   const [kitFilter, setKitFilter] = useState<Id<"firstAidKits"> | "">("");
-  const { results, status, loadMore } = usePaginatedQuery(api.firstAidTreatments.list, kitFilter ? { kitId: kitFilter } : {}, { initialNumItems: 25 });
+  const pages = useCursorPages();
+  const page = useQuery(api.firstAidTreatments.list, { ...(kitFilter ? { kitId: kitFilter } : {}), paginationOpts: { cursor: pages.cursor, numItems: 25 } });
+  const results = page?.page ?? [];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -100,7 +103,7 @@ export function FirstAidTreatments({ kits, isAdmin }: { kits: Kit[]; isAdmin: bo
 
   return <section className="panel" style={{ marginBottom: 20 }}>
     <div className="panel__head"><h2>รายงานการปฐมพยาบาล · First aid given</h2><div className="filters">
-      <select className="select" aria-label="Filter first aid records by kit" value={kitFilter} onChange={e => setKitFilter(e.target.value as Id<"firstAidKits"> | "")}><option value="">All kits</option>{kits.map(k => <option key={k.id} value={k.id}>Kit {k.number}{k.label ? ` · ${k.label}` : ""}</option>)}</select>
+      <select className="select" aria-label="Filter first aid records by kit" value={kitFilter} onChange={e => { setKitFilter(e.target.value as Id<"firstAidKits"> | ""); pages.reset(); }}><option value="">All kits</option>{kits.map(k => <option key={k.id} value={k.id}>Kit {k.number}{k.label ? ` · ${k.label}` : ""}</option>)}</select>
       <button className="button button--soft" disabled={busy} onClick={() => void run(async () => downloadTreatmentCsv(await loadAll()), "Export first aid records")}><Download size={14} /> Export CSV</button>
       <button className="button button--soft" disabled={busy} onClick={print}><Printer size={14} /> Print report</button>
     </div></div>
@@ -119,8 +122,8 @@ export function FirstAidTreatments({ kits, isAdmin }: { kits: Kit[]; isAdmin: bo
         <td><SignatureThumb signature={row.caretakerSignature} label={`Signature of ${row.caretakerName}`} /><span className="kit-log__muted">{row.caretakerName}</span>{row.caretakerFaculty && <> <FacultyTag code={row.caretakerFaculty} /></>}</td>
         {isAdmin && <td><button className="icon-button" disabled={busy} aria-label={`Delete record ${row.sequence} of kit ${row.kitNumber}`} onClick={() => destroy(row)}><Trash2 size={14} /></button></td>}
       </tr>)}
-      {status !== "LoadingFirstPage" && !results.length && <tr><td className="empty-state" colSpan={isAdmin ? 10 : 9}>No first aid has been logged yet.</td></tr>}</tbody>
+      {page === undefined ? <tr><td className="empty-state" colSpan={isAdmin ? 10 : 9} role="status">Loading…</td></tr> : !results.length && <tr><td className="empty-state" colSpan={isAdmin ? 10 : 9}>No first aid has been logged yet.</td></tr>}</tbody>
     </table></div>
-    {status === "CanLoadMore" && <div style={{ textAlign: "center", padding: 16 }}><button className="button button--ghost" onClick={() => loadMore(25)}>Load more</button></div>}
+    <Pager page={pages.page} hasNext={!!page && !page.isDone} loading={page === undefined} onPrevious={pages.previous} onNext={() => page && pages.next(page.continueCursor)} />
   </section>;
 }

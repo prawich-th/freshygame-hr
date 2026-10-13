@@ -99,6 +99,10 @@ export default defineSchema({
     number: v.number(),
     label: v.optional(v.string()),
     active: v.boolean(),
+    // Set while staff report the kit as lost; any borrow or return logged for it clears this.
+    missingSince: v.optional(v.number()),
+    missingNote: v.optional(v.string()),
+    missingReportedBy: v.optional(v.id("users")),
   }).index("by_number", ["number"]),
 
   // Contact details remembered from earlier logs so returning borrowers only need their student ID.
