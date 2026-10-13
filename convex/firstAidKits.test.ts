@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api } from "./_generated/api";
+import { kitStatusReport } from "../shared/firstAidKitStatus";
 const modules = import.meta.glob("./**/*.ts");
 
 async function setup(role: "admin" | "registrar" | "viewer" = "admin") {
@@ -132,27 +133,35 @@ test("student IDs are looked up in the participant registry first, asking only f
   expect(await t.query(api.firstAidKits.knownBorrower, { studentId: "6909680066" })).toMatchObject({ nickname: "บี", phoneHint: "•••-•••-2222" });
 });
 
-test("agents with the API token can read every kit's status as JSON over HTTP", async () => {
-  const { t, kits } = await setup();
+test("the kit status report lists each kit as available, checked out, or missing", async () => {
+  const { t, staff, kits } = await setup();
+  await t.run(ctx => ctx.db.insert("firstAidKits", { number: 3, active: true }));
   await t.mutation(api.firstAidKits.checkOut, { kitId: kits[1].id, sport: "Football", ...person });
-  const previous = process.env.FIRST_AID_API_TOKEN;
-  try {
-    delete process.env.FIRST_AID_API_TOKEN;
-    expect((await t.fetch("/first-aid/kits", { method: "GET" })).status).toBe(503);
-    process.env.FIRST_AID_API_TOKEN = "test-token";
-    expect((await t.fetch("/first-aid/kits", { method: "GET" })).status).toBe(401);
-    expect((await t.fetch("/first-aid/kits", { method: "GET", headers: { Authorization: "Bearer wrong-token" } })).status).toBe(401);
-    const res = await t.fetch("/first-aid/kits", { method: "GET", headers: { Authorization: "Bearer test-token" } });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toMatchObject({ total: 2, available: 1, checkedOut: 1 });
-    expect(body.kits).toEqual([
-      { number: 1, label: "", status: "available", holder: null },
-      { number: 2, label: "", status: "checked_out", holder: expect.objectContaining({ nickname: "ชาย", sport: "Football", borrowedAt: expect.any(String) }) },
-    ]);
-    expect(JSON.stringify(body)).not.toContain(person.studentId);
-  } finally {
-    if (previous === undefined) delete process.env.FIRST_AID_API_TOKEN;
-    else process.env.FIRST_AID_API_TOKEN = previous;
-  }
+  const third = (await t.query(api.firstAidKits.publicStatus, {}))[2];
+  await staff.mutation(api.firstAidKits.setMissing, { kitId: third.id, missing: true });
+  const report = kitStatusReport(await t.query(api.firstAidKits.publicStatus, {}));
+  expect(report).toMatchObject({ total: 3, available: 1, checkedOut: 1, missing: 1 });
+  expect(report.kits.map(k => k.status)).toEqual(["available", "checked_out", "missing"]);
+  expect(report.kits[1].holder).toMatchObject({ nickname: "ชาย", sport: "Football", borrowedAt: expect.any(String) });
+  expect(report.kits[2].missingSince).toEqual(expect.any(String));
+  expect(JSON.stringify(report)).not.toContain(person.studentId);
+});
+
+test("editors can mark a kit missing, and logging it again marks it found", async () => {
+  const { t, staff, kits } = await setup();
+  const viewer = t.withIdentity({ subject: `${await t.run(ctx => ctx.db.insert("users", { role: "viewer", active: true }))}|session` });
+  await expect(viewer.mutation(api.firstAidKits.setMissing, { kitId: kits[0].id, missing: true })).rejects.toThrow("Read-only access");
+  await staff.mutation(api.firstAidKits.setMissing, { kitId: kits[0].id, missing: true, note: "Last seen at the football field" });
+  await expect(staff.mutation(api.firstAidKits.setMissing, { kitId: kits[0].id, missing: true })).rejects.toThrow("already marked missing");
+  const overview = await staff.query(api.firstAidKits.overview, { dayStart: 0 });
+  expect(overview[0].missing).toMatchObject({ note: "Last seen at the football field", reportedByName: "Staff" });
+  expect((await t.query(api.firstAidKits.publicStatus, {}))[0].missingSince).toEqual(expect.any(Number));
+
+  await t.mutation(api.firstAidKits.checkOut, { kitId: kits[0].id, sport: "Football", ...person });
+  expect((await staff.query(api.firstAidKits.overview, { dayStart: 0 }))[0].missing).toBeNull();
+
+  await staff.mutation(api.firstAidKits.setMissing, { kitId: kits[1].id, missing: true });
+  await staff.mutation(api.firstAidKits.setMissing, { kitId: kits[1].id, missing: false });
+  expect((await t.query(api.firstAidKits.publicStatus, {}))[1].missingSince).toBeNull();
+  await expect(staff.mutation(api.firstAidKits.setMissing, { kitId: kits[1].id, missing: false })).rejects.toThrow("not marked missing");
 });

@@ -38,6 +38,7 @@ const publicKit = v.object({
   id: v.id("firstAidKits"),
   number: v.number(),
   label: v.string(),
+  missingSince: v.union(v.number(), v.null()),
   current: v.union(v.object({ name: v.string(), nickname: v.string(), faculty: v.string(), phone: v.string(), sport: v.string(), borrowedAt: v.number() }), v.null()),
 });
 
@@ -46,6 +47,7 @@ const kitOverview = v.object({
   number: v.number(),
   label: v.string(),
   active: v.boolean(),
+  missing: v.union(v.object({ since: v.number(), note: v.string(), reportedByName: v.union(v.string(), v.null()) }), v.null()),
   current: v.union(loan, v.null()),
   lastReturned: v.union(loan, v.null()),
   loansToday: v.number(),
@@ -157,6 +159,12 @@ async function latestLoan(ctx: QueryCtx | MutationCtx, kitId: Id<"firstAidKits">
   return ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_borrowedAt", q => q.eq("kitId", kitId)).order("desc").first();
 }
 
+/** Someone has the kit in hand, so a missing report no longer applies. */
+async function markFound(ctx: MutationCtx, kit: Doc<"firstAidKits">) {
+  if (kit.missingSince === undefined) return;
+  await ctx.db.patch("firstAidKits", kit._id, { missingSince: undefined, missingNote: undefined, missingReportedBy: undefined });
+}
+
 /** Signed-in staff are recorded alongside public log entries; anyone else may log anonymously. */
 export async function optionalStaff(ctx: MutationCtx) {
   const userId = await getAuthUserId(ctx);
@@ -195,7 +203,7 @@ export const publicStatus = query({
     return Promise.all(kits.filter(kit => kit.active).map(async kit => {
       const current = await openLoan(ctx, kit._id);
       return {
-        id: kit._id, number: kit.number, label: kit.label ?? "",
+        id: kit._id, number: kit.number, label: kit.label ?? "", missingSince: kit.missingSince ?? null,
         current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", phone: current.phone, sport: current.sport, borrowedAt: current.borrowedAt } : null,
       };
     }));
@@ -216,7 +224,7 @@ export const publicTracking = query({
       const current = await openLoan(ctx, kit._id);
       const today = await ctx.db.query("firstAidKitLoans").withIndex("by_kitId_and_borrowedAt", q => q.eq("kitId", kit._id).gte("borrowedAt", since)).take(30);
       return {
-        id: kit._id, number: kit.number, label: kit.label ?? "",
+        id: kit._id, number: kit.number, label: kit.label ?? "", missingSince: kit.missingSince ?? null,
         current: current ? { name: current.borrowerName, nickname: current.nickname, faculty: current.faculty ?? "", phone: current.phone, sport: current.sport, borrowedAt: current.borrowedAt } : null,
         today: today.map(row => ({ sport: row.sport, nickname: row.nickname, faculty: row.faculty ?? "", borrowedAt: row.borrowedAt, returnedAt: row.returnedAt ?? null })),
       };
@@ -279,6 +287,7 @@ export const checkOut = mutation({
       borrowerName: borrower.name, nickname: borrower.nickname, phone: borrower.phone, faculty: borrower.faculty, studentId: borrower.studentId,
       sport, note, borrowedAt, borrowedBy: staffId,
     });
+    await markFound(ctx, kit);
     await audit(ctx, staffId, `first_aid_kit_${current ? "handed_over" : "checked_out"}:${kit.number}:${sport}:${borrower.studentId}`);
     return id;
   },
@@ -320,6 +329,7 @@ export const checkIn = mutation({
     const returnedAt = checkTime(args.returnedAt ?? Date.now(), "Return time");
     if (returnedAt < current.borrowedAt) throw new ConvexError("Return time must be after the borrow time");
     await ctx.db.patch("firstAidKitLoans", current._id, { returnedAt, returnerName, returnerStudentId: studentId, returnedBy: staffId, returnPhotoId });
+    await markFound(ctx, kit);
     await audit(ctx, staffId, `first_aid_kit_returned:${kit.number}:${current.sport}:${studentId}`);
     return null;
   },
@@ -341,6 +351,7 @@ export const overview = query({
       const lastReturned = recent.find(row => row.returnedAt !== undefined);
       return {
         id: kit._id, number: kit.number, label: kit.label ?? "", active: kit.active,
+        missing: kit.missingSince === undefined ? null : { since: kit.missingSince, note: kit.missingNote ?? "", reportedByName: kit.missingReportedBy ? (await ctx.db.get("users", kit.missingReportedBy))?.name ?? null : null },
         current: current ? await present(ctx, current, names) : null,
         lastReturned: lastReturned ? await present(ctx, lastReturned, names) : null,
         loansToday: today.length,
@@ -394,6 +405,26 @@ export const updateKit = mutation({
     if (!active && await openLoan(ctx, kitId)) throw new ConvexError(`Kit ${kit.number} is checked out. Record its return before retiring it.`);
     await ctx.db.patch("firstAidKits", kitId, { label: cleanLabel || undefined, active });
     await audit(ctx, staff.userId, `first_aid_kit_updated:${kit.number}:${active ? "active" : "retired"}`);
+    return null;
+  },
+});
+
+/** Report a kit as lost, or clear the report once staff have it back without a borrow or return to log. */
+export const setMissing = mutation({
+  args: { kitId: v.id("firstAidKits"), missing: v.boolean(), note: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, { kitId, missing, note }) => {
+    const staff = await requireEditor(ctx);
+    const kit = await getKit(ctx, kitId);
+    if (missing) {
+      if (!kit.active) throw new ConvexError(`Kit ${kit.number} is retired`);
+      if (kit.missingSince !== undefined) throw new ConvexError(`Kit ${kit.number} is already marked missing`);
+      await ctx.db.patch("firstAidKits", kitId, { missingSince: Date.now(), missingNote: cleanNote(note), missingReportedBy: staff.userId });
+    } else {
+      if (kit.missingSince === undefined) throw new ConvexError(`Kit ${kit.number} is not marked missing`);
+      await markFound(ctx, kit);
+    }
+    await audit(ctx, staff.userId, `first_aid_kit_${missing ? "missing" : "found"}:${kit.number}`);
     return null;
   },
 });

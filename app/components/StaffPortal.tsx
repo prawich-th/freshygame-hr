@@ -25,7 +25,7 @@ import { participantKind, kindLabel, SUPPORT_TYPES, PARADE_TYPES, type Participa
 import { normalizeSport } from "@/shared/sports";
 import { SportCatalog, useSportCatalog } from "./SportCatalog";
 import { ParticipantSelection } from "./ParticipantSelection";
-import { FirstAidKits } from "./FirstAidKits";
+import { FirstAidKits, type FirstAidSection } from "./FirstAidKits";
 import { Brand } from "./Brand";
 import { downloadParticipantCsv, type ParticipantContact } from "../lib/participantCsv";
 import { generateParticipantPdf } from "../lib/participantPdf";
@@ -37,7 +37,7 @@ type Tab = "sports" | "participants" | "import" | "staff" | "audit";
 const statusLabel = { incomplete: "Incomplete", pending: "Pending review", verified: "Verified", rejected: "Needs correction" };
 const statusClass = { incomplete: "pill--gray", pending: "pill--amber", verified: "pill--green", rejected: "pill--red" };
 
-export function StaffPortal({selectionPage = false, directoryPage = false, firstAidPage = false}: {selectionPage?: boolean; directoryPage?: boolean; firstAidPage?: boolean}) {
+export function StaffPortal({selectionPage = false, directoryPage = false, firstAidPage}: {selectionPage?: boolean; directoryPage?: boolean; firstAidPage?: FirstAidSection}) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   if (isLoading) return <div className="auth-page"><span className="spinner" style={{color:"#4b2f25"}} /></div>;
   return isAuthenticated ? <StaffWorkspace selectionPage={selectionPage} directoryPage={directoryPage} firstAidPage={firstAidPage} /> : <StaffAuth />;
@@ -78,9 +78,9 @@ function DirectoryRedirect() {
   return <div className="auth-page" role="status">Opening contact directory…</div>;
 }
 
-function StaffWorkspace({selectionPage: selectionRoute, directoryPage, firstAidPage}: {selectionPage: boolean; directoryPage: boolean; firstAidPage: boolean}) {
+function StaffWorkspace({selectionPage: selectionRoute, directoryPage, firstAidPage}: {selectionPage: boolean; directoryPage: boolean; firstAidPage?: FirstAidSection}) {
   // Standalone staff routes replace the tabbed participant workspace.
-  const selectionPage = selectionRoute || firstAidPage;
+  const selectionPage = selectionRoute || !!firstAidPage;
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -143,7 +143,7 @@ function StaffWorkspace({selectionPage: selectionRoute, directoryPage, firstAidP
       {workspaceError && <div role="alert" className="notice notice--error">{workspaceError}</div>}
       {current.canBootstrap && <div className="notice notice--info" style={{marginBottom:16}}>No administrator exists yet. <button className="button button--soft" style={{marginLeft:8,minHeight:30}} onClick={() => { setWorkspaceError(""); void bootstrap().catch(error => setWorkspaceError(errorMessage(error, "Set up administrator access"))); }}>Make me the first admin</button></div>}
       {!selectionPage && tab === "participants" && <ParticipantDashboard stats={stats} selectedId={selectedId} setSelectedId={setSelectedId} canEdit={current.role !== "viewer"}/>}
-      {firstAidPage && <FirstAidKits role={current.role} />}
+      {firstAidPage && <FirstAidKits role={current.role} section={firstAidPage} />}
       {selectionRoute && (current.role === "admin" ? <ParticipantSelection /> : <div className="notice notice--error">Only administrators can manage participant selection.</div>)}
       {creating && current.role !== "viewer" && <CreateParticipantDrawer onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setSelectedId(id); }} />}
       {tab === "import" && <ImportPanel />}

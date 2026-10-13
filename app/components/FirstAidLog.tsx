@@ -60,13 +60,14 @@ export function FirstAidLog({ kitNumber }: { kitNumber?: number }) {
             {missingLinkedKit && <div className="notice notice--error" role="alert" style={{ marginBottom: 18 }}>ไม่พบกล่องที่ {kitNumber} หรือกล่องนี้เลิกใช้งานแล้ว กรุณาเลือกกล่องด้านล่าง / Kit {kitNumber} was not found or is retired. Choose a kit below.</div>}
             <UploadHeading title="เลือกกล่องปฐมพยาบาล">แตะกล่องที่ต้องการยืมหรือคืน<br />Tap the kit you are borrowing, returning, or used for first aid.</UploadHeading>
             {kits === undefined ? <p role="status">กำลังโหลด / Loading…</p> : kits.length === 0 ? <div className="notice notice--info">ยังไม่มีกล่องในระบบ กรุณาติดต่อเจ้าหน้าที่ / No kits have been set up yet. Please contact staff.</div> :
-              <div className="kit-grid">{kits.map(k => <button key={k.id} type="button" className={`kit-card ${k.current ? "kit-card--out" : "kit-card--available"}`} onClick={() => choose(k.id)}>
-                <span className="kit-card__head"><strong>กล่องที่ {k.number}</strong><span className={`pill ${k.current ? "pill--red" : "pill--green"}`}>{k.current ? "ถูกยืม" : "ว่าง"}</span></span>
+              <div className="kit-grid">{kits.map(k => <button key={k.id} type="button" className={`kit-card ${k.missingSince !== null ? "kit-card--missing" : k.current ? "kit-card--out" : "kit-card--available"}`} onClick={() => choose(k.id)}>
+                <span className="kit-card__head"><strong>กล่องที่ {k.number}</strong><span className={`pill ${k.current || k.missingSince !== null ? "pill--red" : "pill--green"}`}>{k.missingSince !== null ? "หาย / Missing" : k.current ? "ถูกยืม" : "ว่าง"}</span></span>
                 {k.label && <small>{k.label}</small>}
                 {k.current ? <span className="kit-card__where"><b>{k.current.sport}</b><span>{k.current.nickname || k.current.name}{k.current.faculty && <> <FacultyTag code={k.current.faculty} /></>} · {k.current.phone} · {formatTime(k.current.borrowedAt)}</span></span> : <span className="kit-card__where"><span>พร้อมให้ยืม / Available</span></span>}
               </button>)}</div>}
           </> : <>
             <div className="upload-person"><BriefcaseMedical size={24} /><div><strong>กล่องที่ {kit.number}{kit.label ? ` · ${kit.label}` : ""}</strong><span>{kit.current ? <>{`อยู่กับ ${kit.current.name} (${kit.current.nickname})${kit.current.faculty ? ` ${kit.current.faculty}` : ""} · ${kit.current.sport} · ตั้งแต่ ${formatTime(kit.current.borrowedAt)}`} · โทร <a className="kit-phone" href={`tel:${kit.current.phone}`}>{kit.current.phone}</a></> : "พร้อมให้ยืม / Available"}</span></div></div>
+            {kit.missingSince !== null && <div className="notice notice--error" role="alert" style={{ marginBottom: 18 }}>กล่องนี้ถูกแจ้งว่าหาย หากคุณพบกล่องนี้ กรุณายืมหรือคืนตามปกติ ระบบจะบันทึกว่าพบแล้ว / This kit was reported missing. If you have it, borrow or return it as usual and it will be marked found.</div>}
             {!mode && <>
               <UploadHeading title="ต้องการทำอะไร?">{kit.current ? "เลือก “คืนกล่อง” เมื่อนำกล่องกลับมาคืน “รับต่อ” เมื่อรับกล่องต่อจากกีฬาก่อนหน้าโดยตรง หรือ “บันทึกการปฐมพยาบาล” เมื่อใช้ยาหรือเวชภัณฑ์" : "ยืมกล่องไปใช้ หรือบันทึกการปฐมพยาบาลเมื่อใช้ยาหรือเวชภัณฑ์จากกล่องนี้"}</UploadHeading>
               <div className="kit-actions">
